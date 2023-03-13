@@ -3246,7 +3246,7 @@
           <pose frame=''>0 0 0 0 -0 0</pose>
           <geometry>
             <mesh>
-              <uri>/home/wu/.gazebo/models/office_building/meshes/office_building.dae</uri>
+              <uri>model://office_building/meshes/office_building.dae</uri>
               <scale>1 1 1</scale>
             </mesh>
           </geometry>
@@ -3548,7 +3548,7 @@
           <pose frame=''>0 0 0 0 -0 0</pose>
           <geometry>
             <mesh>
-              <uri>/home/iot/.gazebo/models/office_building/meshes/office_building.dae</uri>
+              <uri>model://office_building/meshes/office_building.dae</uri>
               <scale>1 1 1</scale>
             </mesh>
           </geometry>
@@ -3651,7 +3651,7 @@
           <pose frame=''>0 0 0 0 -0 0</pose>
           <geometry>
             <mesh>
-              <uri>/home/iot/.gazebo/models/office_building/meshes/office_building.dae</uri>
+              <uri>model://office_building/meshes/office_building.dae</uri>
               <scale>1 1 1</scale>
             </mesh>
           </geometry>
@@ -3754,7 +3754,7 @@
           <pose frame=''>0 0 0 0 -0 0</pose>
           <geometry>
             <mesh>
-              <uri>/home/iot/.gazebo/models/office_building/meshes/office_building.dae</uri>
+              <uri>model://office_building/meshes/office_building.dae</uri>
               <scale>1 1 1</scale>
             </mesh>
           </geometry>
@@ -3857,7 +3857,7 @@
           <pose frame=''>0 0 0 0 -0 0</pose>
           <geometry>
             <mesh>
-              <uri>/home/iot/.gazebo/models/office_building/meshes/office_building.dae</uri>
+              <uri>model://office_building/meshes/office_building.dae</uri>
               <scale>1 1 1</scale>
             </mesh>
           </geometry>
@@ -3960,7 +3960,7 @@
           <pose frame=''>0 0 0 0 -0 0</pose>
           <geometry>
             <mesh>
-              <uri>/home/iot/.gazebo/models/office_building/meshes/office_building.dae</uri>
+              <uri>model://office_building/meshes/office_building.dae</uri>
               <scale>1 1 1</scale>
             </mesh>
           </geometry>
