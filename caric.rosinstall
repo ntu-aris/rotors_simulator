@@ -1,0 +1,3 @@
+- git: {local-name: rotors_simulator, uri: 'https://github.com/caomuqing/rotors_simulator.git'}
+- git: {local-name: tcc, uri: 'https://github.com/caomuqing/tcc.git', version: 'caric'}
+- git: {local-name: traj_gennav, uri: 'https://github.com/caomuqing/traj_gennav.git', version: 'caric'}
