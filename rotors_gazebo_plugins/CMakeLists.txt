@@ -12,6 +12,10 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(rotors_gazebo_plugins)
 
+# set(CMAKE_BUILD_TYPE "Release")
+# set(CMAKE_CXX_FLAGS "-std=c++17 -Wfatal-errors")
+# set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+
 #
 #if ( ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR} )
 #  message( FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt." )
@@ -174,6 +178,9 @@ include_directories(${YamlCpp_INCLUDE_DIR})
 # ============================================== #
 # =================== PROTOBUF ================= #
 # ============================================== #
+
+# include_directories("/home/tmn/Libraries/miniconda3/include/")
+# include_directories("/home/tmn/Libraries/miniconda3/envs/py3810/include/")
 
 set(PROTOBUF_IMPORT_DIRS "")
 foreach(ITR ${GAZEBO_INCLUDE_DIRS})
@@ -517,6 +524,14 @@ if (NOT NO_ROS)
   target_link_libraries(rotors_gazebo_wind_plugin ${target_linking_LIBRARIES} )
   add_dependencies(rotors_gazebo_wind_plugin ${catkin_EXPORTED_TARGETS})
   list(APPEND targets_to_install rotors_gazebo_wind_plugin)
+endif()
+
+#========================================= PPCOM PLUGIN =========================================//
+if (NOT NO_ROS)
+  add_library(rotors_gazebo_ppcom_plugin SHARED src/gazebo_ppcom_plugin.cpp)
+  target_link_libraries(rotors_gazebo_ppcom_plugin ${target_linking_LIBRARIES} )
+  add_dependencies(rotors_gazebo_ppcom_plugin ${catkin_EXPORTED_TARGETS})
+  list(APPEND targets_to_install rotors_gazebo_ppcom_plugin)
 endif()
 
 # =============================================================================================== #
