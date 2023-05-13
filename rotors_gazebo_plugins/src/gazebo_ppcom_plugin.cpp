@@ -30,6 +30,7 @@
 #include <iostream>
 #include <fstream>
 #include <thread>
+#include <algorithm>
 
 #include "std_msgs/ColorRGBA.h"
 #include "visualization_msgs/Marker.h"
@@ -111,10 +112,20 @@ namespace gazebo
         {
             // Process the line here
             cout << "Reading " << line << endl;
+            
+            // Remove spaces in the line
+            line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
+
+            // Skip the line of its commented out
+            if (line[0] == '#')
+                continue;
+
+            // Decode the line
             vector<string> parts = Util::split(line, ",");
             PPComNode newNode;
             newNode.name = parts[0];
-            newNode.offset = stod(parts[1]);
+            newNode.role = parts[1];
+            newNode.offset = stod(parts[2]);
             ppcom_nodes_.push_back(newNode);
         }
 

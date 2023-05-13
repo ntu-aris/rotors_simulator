@@ -114,6 +114,8 @@ class GazeboPPComPlugin : public ModelPlugin {
       // Name of the node
       string name = "";
 
+      string role = "";
+
       // Offset used to do ray tracing
       double offset = 0.0;
 
