@@ -2,6 +2,6 @@
 gcs,        manager,  0.1
 firefly1,   peer,     0.1
 firefly2,   peer,     0.1
-firefly3,   peer,     0.1
+firefly3,   manager,  0.1
 firefly4,   peer,     0.1
 firefly5,   peer,     0.1

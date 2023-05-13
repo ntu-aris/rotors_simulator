@@ -34,6 +34,7 @@
 
 #include "std_msgs/ColorRGBA.h"
 #include "visualization_msgs/Marker.h"
+#include "rotors_comm/PPComTopology.h"
 
 // Physics
 #include <gazebo/physics/physics.hh>
@@ -49,6 +50,14 @@ using namespace std;
 
 namespace gazebo
 {
+    // PPCom class, helper of the plugin
+    PPComNode::PPComNode() {}
+    PPComNode::PPComNode(const string &name_, const string &role_, const double &offset_)
+        : name(name_), role(role_), offset(offset_)  {}
+        
+    PPComNode::~PPComNode() {}
+
+    // Plugin definition
     GazeboPPComPlugin::GazeboPPComPlugin()
         : ModelPlugin(), gz_node_handle_(0) {}
 
@@ -120,13 +129,9 @@ namespace gazebo
             if (line[0] == '#')
                 continue;
 
-            // Decode the line
+            // Decode the line and construct the node
             vector<string> parts = Util::split(line, ",");
-            PPComNode newNode;
-            newNode.name = parts[0];
-            newNode.role = parts[1];
-            newNode.offset = stod(parts[2]);
-            ppcom_nodes_.push_back(newNode);
+            ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2])));
         }
 
         // Assert that ppcom_id_ is found in the network
@@ -165,6 +170,9 @@ namespace gazebo
             node.odom_sub
                 = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + node.name + "/ground_truth/odometry", 1,
                                                                   boost::bind(&GazeboPPComPlugin::OdomCallback, this, _1, node_idx));
+
+            node.topo_pub
+                = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
 
             // Create the storage of nodes to each object
             node.odom_msg = nav_msgs::Odometry();
@@ -208,107 +216,53 @@ namespace gazebo
         common::Time current_time = world_->SimTime();
         double dt = (current_time - last_time_).Double();
 
+        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
+            return;
+
         // Update the ray casting every 0.1s
         if (dt > 0.1)
         {
             last_time_ = current_time;
 
-            PPComNode &ppcom_slf = ppcom_nodes_[ppcom_slf_idx_];
+            Eigen::MatrixXd distMat = Eigen::MatrixXd::Zero(Nnodes_, Nnodes_);
+            vector<vector<bool>> los_check(Nnodes_, vector<bool>(Nnodes_, false));
 
-            // Create the basic odom vector
-            Vector3d ps(ppcom_slf.odom_msg.pose.pose.position.x,
-                        ppcom_slf.odom_msg.pose.pose.position.y,
-                        ppcom_slf.odom_msg.pose.pose.position.z);
-
-            vector<Vector3d> pA;
-            pA.push_back(ps + Vector3d(ppcom_slf.offset, 0, 0));
-            pA.push_back(ps - Vector3d(ppcom_slf.offset, 0, 0));
-            pA.push_back(ps + Vector3d(0, ppcom_slf.offset, 0));
-            pA.push_back(ps - Vector3d(0, ppcom_slf.offset, 0));
-            pA.push_back(ps + Vector3d(0, 0, ppcom_slf.offset));
-            pA.push_back(ps - Vector3d(0, 0, ppcom_slf.offset));
-            // Make sure the virtual antenna does not go below the ground
-            pA.back().z() = max(0.1, pA.back().z());
-
-            map<string, bool> los_check;
-            for(PPComNode &ppcom_nbr : ppcom_nodes_)
+            for(int i = 0; i < Nnodes_; i ++)
             {
-                // Defaulting the line of sight to this nbr as false
-                los_check[ppcom_nbr.name] = false;
+                PPComNode &node_i = ppcom_nodes_[i];
+
+                if (!node_i.odom_msg_received)
+                    continue;
+
+                // Create the start points
+                Vector3d pi(node_i.odom_msg.pose.pose.position.x,
+                            node_i.odom_msg.pose.pose.position.y,
+                            node_i.odom_msg.pose.pose.position.z);
                 
-                // If no odom from node has arrived, skip
-                if(!ppcom_nbr.odom_msg_received)
-                    continue;
-
-                // If this nbr node is the self, skip
-                if (ppcom_slf.name == ppcom_nbr.name)
-                    continue;
-
-                // Find the position of the neighbour
-                Vector3d pe(ppcom_nbr.odom_msg.pose.pose.position.x,
-                            ppcom_nbr.odom_msg.pose.pose.position.y,
-                            ppcom_nbr.odom_msg.pose.pose.position.z);
-
-                vector<Vector3d> pB;
-                pB.push_back(pe + Vector3d(ppcom_nbr.offset, 0, 0));
-                pB.push_back(pe - Vector3d(ppcom_nbr.offset, 0, 0));
-                pB.push_back(pe + Vector3d(0, ppcom_nbr.offset, 0));
-                pB.push_back(pe - Vector3d(0, ppcom_nbr.offset, 0));
-                pB.push_back(pe + Vector3d(0, 0, ppcom_nbr.offset));
-                pB.push_back(pe - Vector3d(0, 0, ppcom_nbr.offset));
-                // Make sure the virtual antenna does not go below the ground
-                pB.back().z() = max(0.1, pB.back().z());
-
-                // Ray tracing from the slf node to each of the nbr node
-                double rtDist;           // Raytracing distance
-                double ppDist = 0;       // Peer to peer distance
-                string entity_name;      // Name of intersected object
-                ignition::math::Vector3d start_point;
-                ignition::math::Vector3d end_point;
-                for(Vector3d &pa : pA)
+                for (int j = i+1; j < Nnodes_; j++)
                 {
-                    start_point = ignition::math::Vector3d(pa.x(), pa.y(), pa.z());
+                    PPComNode &node_j = ppcom_nodes_[j];
 
-                    for(Vector3d &pb : pB)
-                    {
-                        end_point = ignition::math::Vector3d(pb.x(), pb.y(), pb.z());
+                    if (!node_j.odom_msg_received)
+                        continue;
 
-                        ppcom_nbr.ray->SetPoints(start_point, end_point);
-                        ppcom_nbr.ray->GetIntersection(rtDist, entity_name);
+                    assert(node_i.name != node_j.name);
 
-                        ppDist = (pa - pb).norm();
-                        if (rtDist >= ppDist - 0.1)
-                        {
-                            los_check[ppcom_nbr.name] = true;
-                            break;
-                        }
-                    }
+                    // Find the position of the neighbour
+                    Vector3d pj(node_j.odom_msg.pose.pose.position.x,
+                                node_j.odom_msg.pose.pose.position.y,
+                                node_j.odom_msg.pose.pose.position.z);
 
-                    if (los_check[ppcom_nbr.name])
-                        break;
+                    los_check[i][j] = los_check[j][i] = CheckLOS(pi, node_i.offset, pj, node_j.offset, node_i.ray);
+                    
+                    // Assign the distance if there is line of sight
+                    if (los_check[i][j])
+                        distMat(i, j) = distMat(j, i) = (pi - pj).norm();
                 }
-
-                // Print out the result for the first node
-                // if(ppcom_id_ == "firefly1")
-                // {
-                //     printf("%s"
-                //             "Time: %9.3f.\n"
-                //             "Start %s. XYZ: %7.3f, %7.3f, %7.3f. ppDist: %7.3f.\n"
-                //             "End   %s. XYZ: %7.3f, %7.3f, %7.3f. rtDist: %7.3f. Entity: %s\n\n" RESET
-                //             ,
-                //             line_of_sight ? KBLU "LOS " : KYEL "NLOS",
-                //             t, ppcom_id_.c_str(), node_id.c_str(),
-                //             start_point.X(), start_point.Y(), start_point.Z(),
-                //             end_point.X(), end_point.Y(), end_point.Z(),
-                //             ppDist, rtDist, entity_name.c_str());
-                // }
             }
-
-            // cout << "Thread: " << this_thread::get_id() << ". ";
-            // printf("Node %02d-%s. LOS check: ", ppcom_slf_idx_ + 1, ppcom_id_.c_str());
-            // for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
-            //     cout << los_check[node_idx] << " ";
-            // cout << endl;
+            
+            
+            /* #region Publish visualization of the topology --------------------------------------------------------*/
 
             typedef visualization_msgs::Marker RosVizMarker;
             typedef std_msgs::ColorRGBA RosVizColor;
@@ -360,28 +314,90 @@ namespace gazebo
             vizAidSelf.marker.points.clear();
             vizAidSelf.marker.colors.clear();
 
-            for(PPComNode &ppcom_nbr : ppcom_nodes_)
+            for(int i = 0; i < Nnodes_; i++)
             {
-                if (ppcom_nbr.name == ppcom_slf.name)
-                    continue;
-
-                // string node_id = ppcom_nodes_[node_idx].name;
-
-                if(los_check[ppcom_nbr.name])
+                for (int j = i+1; j < Nnodes_; j++)
                 {
-                    geometry_msgs::Point point;
+                    if(los_check[i][j])
+                    {
+                        vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
+                        vizAidSelf.marker.colors.push_back(vizAidSelf.color);
 
-                    vizAidSelf.marker.points.push_back(ppcom_slf.odom_msg.pose.pose.position);
-                    vizAidSelf.marker.colors.push_back(vizAidSelf.color);
-
-                    vizAidSelf.marker.points.push_back(ppcom_nbr.odom_msg.pose.pose.position);
-                    vizAidSelf.marker.colors.push_back(vizAidSelf.color);
+                        vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
+                        vizAidSelf.marker.colors.push_back(vizAidSelf.color);
+                    }
                 }
             }
 
             vizAidSelf.rosPub.publish(vizAidSelf.marker);
-        }
 
+            /* #endregion Publish visualization of the topology -----------------------------------------------------*/
+
+
+            // Publish the information of the topology
+            rotors_comm::PPComTopology topo_msg;
+            topo_msg.header.frame_id = "world";
+            topo_msg.header.stamp = ros::Time::now();
+
+            topo_msg.node_ids.clear();
+            for(PPComNode &node : ppcom_nodes_)
+                topo_msg.node_ids.push_back(node.name);
+            
+            topo_msg.ranges.clear();
+            for(int i = 0; i < Nnodes_; i++)
+                for(int j = i+1; j < Nnodes_; j++)
+                    topo_msg.ranges.push_back(distMat(i, j));
+            
+            ppcom_nodes_[ppcom_slf_idx_].topo_pub.publish(topo_msg);
+        }
+    }
+
+    bool GazeboPPComPlugin::CheckLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray)
+    {
+        vector<Vector3d> Pi;
+        Pi.push_back(pi + Vector3d(bi, 0, 0));
+        Pi.push_back(pi - Vector3d(bi, 0, 0));
+        Pi.push_back(pi + Vector3d(0, bi, 0));
+        Pi.push_back(pi - Vector3d(0, bi, 0));
+        Pi.push_back(pi + Vector3d(0, 0, bi));
+        Pi.push_back(pi - Vector3d(0, 0, bi));
+        // Make sure the virtual antenna does not go below the ground
+        Pi.back().z() = max(0.1, Pi.back().z());
+
+        vector<Vector3d> Pj;
+        Pj.push_back(pj + Vector3d(bj, 0, 0));
+        Pj.push_back(pj - Vector3d(bj, 0, 0));
+        Pj.push_back(pj + Vector3d(0, bj, 0));
+        Pj.push_back(pj - Vector3d(0, bj, 0));
+        Pj.push_back(pj + Vector3d(0, 0, bj));
+        Pj.push_back(pj - Vector3d(0, 0, bj));
+        // Make sure the virtual antenna does not go below the ground
+        Pj.back().z() = max(0.1, Pj.back().z());
+
+        // Ray tracing from the slf node to each of the nbr node
+        double rtDist;           // Raytracing distance
+        double ppDist = 0;       // Peer to peer distance
+        string entity_name;      // Name of intersected object
+        ignition::math::Vector3d start_point;
+        ignition::math::Vector3d end_point;
+        bool los = false;
+        for(Vector3d &pa : Pi)
+        {
+            start_point = ignition::math::Vector3d(pa.x(), pa.y(), pa.z());
+
+            for(Vector3d &pb : Pj)
+            {
+                end_point = ignition::math::Vector3d(pb.x(), pb.y(), pb.z());
+
+                ray->SetPoints(start_point, end_point);
+                ray->GetIntersection(rtDist, entity_name);
+
+                ppDist = (pa - pb).norm();
+                if (rtDist >= ppDist - 0.1)
+                    return true;
+            }
+        }
+        return los;
     }
 
     GZ_REGISTER_MODEL_PLUGIN(GazeboPPComPlugin);

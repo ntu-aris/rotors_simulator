@@ -50,6 +50,37 @@ using namespace std;
 
 namespace gazebo {
 
+// Object to store the node info
+struct PPComNode
+{
+    PPComNode();
+    PPComNode(const string &name_, const string &role_, const double &offset_);
+   
+   ~PPComNode();
+    
+    // Name of the node
+    string name = "";
+
+    string role = "";
+
+    // Offset used to do ray tracing
+    double offset = 0.0;
+
+    // ray tracing object
+    gazebo::physics::RayShapePtr ray;
+
+    // Subsribed odometry subscriber
+    ros::Subscriber odom_sub;
+
+    // Subsribed odometry subscriber
+    ros::Publisher topo_pub;
+
+    // Saved odometry message
+    nav_msgs::Odometry odom_msg;
+
+    bool odom_msg_received = false;
+};
+
 class GazeboPPComPlugin : public ModelPlugin {
  public:
 
@@ -69,6 +100,7 @@ class GazeboPPComPlugin : public ModelPlugin {
  private:
 
   void OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx);
+  bool CheckLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
 
   string namespace_;
   string ppcom_topic_;
@@ -102,34 +134,6 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   /// \brief  Path to the configuration of the network
   string ppcom_config_;
-
-
-  // Object to store the node info
-  struct PPComNode
-  {
-    //   PPComNode();
-    //   PPComNode(const string &name_, const double &offset_) : name(name_), offset(offset_) {};
-    //  ~PPComNode();
-     
-      // Name of the node
-      string name = "";
-
-      string role = "";
-
-      // Offset used to do ray tracing
-      double offset = 0.0;
-
-      // ray tracing object
-      gazebo::physics::RayShapePtr ray;
-
-      // Subsribed odometry subscriber
-      ros::Subscriber odom_sub;
-
-      // Saved odometry message
-      nav_msgs::Odometry odom_msg;
-
-      bool odom_msg_received = false;
-  };
 
   /// \brief  Number of node in the network
   int Nnodes_;

@@ -60,7 +60,7 @@
   <!-- </xacro:if> -->
 
   <!-- Mount a PPCom-sensor in the center of body. -->
-  <xacro:ppcom_plugin_macro
+  <!-- <xacro:ppcom_plugin_macro
       namespace="${namespace}"
       ppcom_suffix=""
       parent_link="${namespace}/base_link"
@@ -71,6 +71,6 @@
   >
     <inertia ixx="0.00001" ixy="0.0" ixz="0.0" iyy="0.00001" iyz="0.0" izz="0.00001" />
     <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
-  </xacro:ppcom_plugin_macro>
+  </xacro:ppcom_plugin_macro> -->
 
 </robot>
