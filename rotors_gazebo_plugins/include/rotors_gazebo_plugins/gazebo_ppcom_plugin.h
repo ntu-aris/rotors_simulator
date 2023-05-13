@@ -116,6 +116,17 @@ class GazeboPPComPlugin : public ModelPlugin {
 
       // Offset used to do ray tracing
       double offset = 0.0;
+
+      // ray tracing object
+      gazebo::physics::RayShapePtr ray;
+
+      // Subsribed odometry subscriber
+      ros::Subscriber odom_sub;
+
+      // Saved odometry message
+      nav_msgs::Odometry odom_msg;
+
+      bool odom_msg_received = false;
   };
 
   /// \brief  Number of node in the network
@@ -124,21 +135,11 @@ class GazeboPPComPlugin : public ModelPlugin {
   /// \brief  Name of the nodes read from the ppcom_config_
   vector<PPComNode> ppcom_nodes_;
 
-  /// \brief  Pointer to the ray tracer
-  vector<gazebo::physics::RayShapePtr> rays_;
-
-  /// \brief  Subscriber to odometry data
-  vector<ros::Subscriber> odom_sub;
-
-  /// \brief  Storaage of odometry data
-  vector<bool> odom_msgs_received;
-  vector<nav_msgs::Odometry> odom_msgs;
-
-  /// \brief  Pointer to the update event connection.
+  // /// \brief  Pointer to the update event connection.
   event::ConnectionPtr updateConnection_;
 
-  default_random_engine random_generator_;
-  normal_distribution<double> standard_normal_distribution_;
+  // default_random_engine random_generator_;
+  // normal_distribution<double> standard_normal_distribution_;
 
   common::Time last_time_;
 };

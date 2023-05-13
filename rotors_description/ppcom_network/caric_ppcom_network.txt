@@ -1,5 +1,5 @@
-firefly1,0.5
-firefly2,0.5
-firefly3,0.5
-firefly4,0.5
-firefly5,0.5
+firefly1,0.1
+firefly2,0.1
+firefly3,0.1
+firefly4,0.1
+firefly5,0.1

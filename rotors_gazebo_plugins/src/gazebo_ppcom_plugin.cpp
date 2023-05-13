@@ -99,9 +99,7 @@ namespace gazebo
 
         // Report on params obtained from sdf
         printf(KGRN "PPCom Id %s is set. Linkname %s. Config %s!\n" RESET,
-                     ppcom_id_.c_str(),
-                     self_link_name_.c_str(),
-                     ppcom_config_.c_str());
+                     ppcom_id_.c_str(), self_link_name_.c_str(), ppcom_config_.c_str());
 
         // Open the config file and read the links
         std::ifstream ppcom_config_file(ppcom_config_.c_str());
@@ -146,27 +144,24 @@ namespace gazebo
         // Create a ros node
         ros_node_handle_ = new ros::NodeHandle("/firefly" + ppcom_id_ + "rosnode");
 
-        odom_sub.resize(Nnodes_);
-        rays_.resize(Nnodes_);
-        odom_msgs_received.resize(Nnodes_);
-        odom_msgs.resize(Nnodes_);
-
         // Subscribe to the odom topics
-        for (int node_idx = 0; node_idx < Nnodes_; node_idx++)
+        int node_idx = -1;
+        for (PPComNode &node : ppcom_nodes_)
         {
+            node_idx++;
+
             // Create the subscriber to each nodes
-            odom_sub[node_idx]
-                = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + ppcom_nodes_[node_idx].name + "/ground_truth/odometry", 1,
+            node.odom_sub
+                = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + node.name + "/ground_truth/odometry", 1,
                                                                   boost::bind(&GazeboPPComPlugin::OdomCallback, this, _1, node_idx));
 
             // Create the storage of nodes to each object
-            odom_msgs[node_idx] = nav_msgs::Odometry();
-            odom_msgs_received[node_idx] = false;
+            node.odom_msg = nav_msgs::Odometry();
+            node.odom_msg_received = false;
 
             // Create rayshape object
-            rays_[node_idx]
-                = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                    (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+            node.ray = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+                        (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
         }
 
         // Listen to the update event. This event is broadcast every simulation iteration.
@@ -176,8 +171,8 @@ namespace gazebo
 
     void GazeboPPComPlugin::OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx)
     {
-        odom_msgs[node_idx] = *msg;
-        odom_msgs_received[node_idx] = true;
+        ppcom_nodes_[node_idx].odom_msg = *msg;
+        ppcom_nodes_[node_idx].odom_msg_received = true;
         
         // nav_msgs::Odometry &odom = odom_msgs[node_idx];
 
@@ -199,14 +194,7 @@ namespace gazebo
         if (kPrintOnUpdates)
             gzdbg << __FUNCTION__ << "() called." << endl;
 
-        // if (!pubs_and_subs_created_)
-        // {
-        //     CreatePubsAndSubs();
-        //     pubs_and_subs_created_ = true;
-        // }
-
         common::Time current_time = world_->SimTime();
-        double t = current_time.Double();
         double dt = (current_time - last_time_).Double();
 
         // Update the ray casting every 0.1s
@@ -214,56 +202,58 @@ namespace gazebo
         {
             last_time_ = current_time;
 
-            Vector3d ps(odom_msgs[ppcom_slf_idx_].pose.pose.position.x,
-                        odom_msgs[ppcom_slf_idx_].pose.pose.position.y,
-                        odom_msgs[ppcom_slf_idx_].pose.pose.position.z);
+            PPComNode &ppcom_slf = ppcom_nodes_[ppcom_slf_idx_];
+
+            // Create the basic odom vector
+            Vector3d ps(ppcom_slf.odom_msg.pose.pose.position.x,
+                        ppcom_slf.odom_msg.pose.pose.position.y,
+                        ppcom_slf.odom_msg.pose.pose.position.z);
 
             vector<Vector3d> pA;
-            pA.push_back(ps + Vector3d(ppcom_nodes_[ppcom_slf_idx_].offset, 0, 0));
-            pA.push_back(ps - Vector3d(ppcom_nodes_[ppcom_slf_idx_].offset, 0, 0));
-            pA.push_back(ps + Vector3d(0, ppcom_nodes_[ppcom_slf_idx_].offset, 0));
-            pA.push_back(ps - Vector3d(0, ppcom_nodes_[ppcom_slf_idx_].offset, 0));
-            pA.push_back(ps + Vector3d(0, 0, ppcom_nodes_[ppcom_slf_idx_].offset));
-            pA.push_back(ps - Vector3d(0, 0, ppcom_nodes_[ppcom_slf_idx_].offset));
+            pA.push_back(ps + Vector3d(ppcom_slf.offset, 0, 0));
+            pA.push_back(ps - Vector3d(ppcom_slf.offset, 0, 0));
+            pA.push_back(ps + Vector3d(0, ppcom_slf.offset, 0));
+            pA.push_back(ps - Vector3d(0, ppcom_slf.offset, 0));
+            pA.push_back(ps + Vector3d(0, 0, ppcom_slf.offset));
+            pA.push_back(ps - Vector3d(0, 0, ppcom_slf.offset));
             // Make sure the virtual antenna does not go below the ground
             pA.back().z() = max(0.1, pA.back().z());
 
-            vector<bool> los_check(Nnodes_, false);
-            for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
+            map<string, bool> los_check;
+            for(PPComNode &ppcom_nbr : ppcom_nodes_)
             {
-                string node_id = ppcom_nodes_[node_idx].name;
-
+                // Defaulting the line of sight to this nbr as false
+                los_check[ppcom_nbr.name] = false;
+                
                 // If no odom from node has arrived, skip
-                if(!odom_msgs_received[node_idx])
+                if(!ppcom_nbr.odom_msg_received)
                     continue;
 
-                // If node is the same with id, skip
-                if (node_id == ppcom_id_)
+                // If this nbr node is the self, skip
+                if (ppcom_slf.name == ppcom_nbr.name)
                     continue;
 
                 // Find the position of the neighbour
-                Vector3d pe(odom_msgs[node_idx].pose.pose.position.x,
-                            odom_msgs[node_idx].pose.pose.position.y,
-                            odom_msgs[node_idx].pose.pose.position.z);
+                Vector3d pe(ppcom_nbr.odom_msg.pose.pose.position.x,
+                            ppcom_nbr.odom_msg.pose.pose.position.y,
+                            ppcom_nbr.odom_msg.pose.pose.position.z);
 
                 vector<Vector3d> pB;
-                pB.push_back(pe + Vector3d(ppcom_nodes_[node_idx].offset, 0, 0));
-                pB.push_back(pe - Vector3d(ppcom_nodes_[node_idx].offset, 0, 0));
-                pB.push_back(pe + Vector3d(0, ppcom_nodes_[node_idx].offset, 0));
-                pB.push_back(pe - Vector3d(0, ppcom_nodes_[node_idx].offset, 0));
-                pB.push_back(pe + Vector3d(0, 0, ppcom_nodes_[node_idx].offset));
-                pB.push_back(pe - Vector3d(0, 0, ppcom_nodes_[node_idx].offset));
+                pB.push_back(pe + Vector3d(ppcom_nbr.offset, 0, 0));
+                pB.push_back(pe - Vector3d(ppcom_nbr.offset, 0, 0));
+                pB.push_back(pe + Vector3d(0, ppcom_nbr.offset, 0));
+                pB.push_back(pe - Vector3d(0, ppcom_nbr.offset, 0));
+                pB.push_back(pe + Vector3d(0, 0, ppcom_nbr.offset));
+                pB.push_back(pe - Vector3d(0, 0, ppcom_nbr.offset));
                 // Make sure the virtual antenna does not go below the ground
                 pB.back().z() = max(0.1, pB.back().z());
 
-                // Ray tracing every pair to check the line of sight
+                // Ray tracing from the slf node to each of the nbr node
                 double rtDist;           // Raytracing distance
                 double ppDist = 0;       // Peer to peer distance
-                string entity_name; // Name of intersected object
-                bool line_of_sight = false;
+                string entity_name;      // Name of intersected object
                 ignition::math::Vector3d start_point;
                 ignition::math::Vector3d end_point;
-
                 for(Vector3d &pa : pA)
                 {
                     start_point = ignition::math::Vector3d(pa.x(), pa.y(), pa.z());
@@ -272,22 +262,20 @@ namespace gazebo
                     {
                         end_point = ignition::math::Vector3d(pb.x(), pb.y(), pb.z());
 
-                        rays_[node_idx]->SetPoints(start_point, end_point);
-                        rays_[node_idx]->GetIntersection(rtDist, entity_name);
+                        ppcom_nbr.ray->SetPoints(start_point, end_point);
+                        ppcom_nbr.ray->GetIntersection(rtDist, entity_name);
 
                         ppDist = (pa - pb).norm();
                         if (rtDist >= ppDist - 0.1)
                         {
-                            line_of_sight = true;
+                            los_check[ppcom_nbr.name] = true;
                             break;
                         }
                     }
 
-                    if (line_of_sight)
+                    if (los_check[ppcom_nbr.name])
                         break;
                 }
-
-                los_check[node_idx] = line_of_sight;
 
                 // Print out the result for the first node
                 // if(ppcom_id_ == "firefly1")
@@ -305,104 +293,85 @@ namespace gazebo
                 // }
             }
 
-            cout << "Thread: " << this_thread::get_id() << ". ";
-            printf("Node %02d-%s. LOS check: ", ppcom_slf_idx_ + 1, ppcom_id_.c_str());
-            for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
-                cout << los_check[node_idx] << " ";
-            cout << endl;
+            // cout << "Thread: " << this_thread::get_id() << ". ";
+            // printf("Node %02d-%s. LOS check: ", ppcom_slf_idx_ + 1, ppcom_id_.c_str());
+            // for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
+            //     cout << los_check[node_idx] << " ";
+            // cout << endl;
 
             typedef visualization_msgs::Marker RosVizMarker;
             typedef std_msgs::ColorRGBA RosVizColor;
             typedef ros::Publisher RosPub;
 
-            // Create the los marker
-            static vector<bool>         los_marker_inited(Nnodes_, false);
-            static vector<RosVizColor>  color(Nnodes_, RosVizColor());
-            static vector<RosVizMarker> los_marker(Nnodes_, RosVizMarker());
-            static vector<RosPub>       los_marker_pub(Nnodes_, RosPub());
-
-            // Initialize the loop marker
-            if (!los_marker_inited[ppcom_slf_idx_])
+            struct VizAid
             {
-                los_marker_pub[ppcom_slf_idx_]
-                    = ros_node_handle_->advertise<RosVizMarker>("/" + ppcom_id_ + "/los_marker", 1);
+                bool           inited = false;
+                RosVizColor    color  = RosVizColor();
+                RosVizMarker   marker = RosVizMarker();
+                ros::Publisher rosPub = RosPub();
+            };
+
+            // Create the los marker
+            static vector<VizAid> vizAid(Nnodes_);
+            VizAid &vizAidSelf = vizAid[ppcom_slf_idx_];
+            
+            // Initialize the loop marker
+            if (!vizAidSelf.inited)
+            {
+                vizAidSelf.rosPub = ros_node_handle_->advertise<RosVizMarker>("/" + ppcom_id_ + "/los_marker", 1);
 
                 // Set up the loop marker
-                los_marker_inited[ppcom_slf_idx_] = true;
-                los_marker[ppcom_slf_idx_].header.frame_id = "world";
-                los_marker[ppcom_slf_idx_].ns       = "loop_marker";
-                los_marker[ppcom_slf_idx_].type     = visualization_msgs::Marker::LINE_LIST;
-                los_marker[ppcom_slf_idx_].action   = visualization_msgs::Marker::ADD;
-                los_marker[ppcom_slf_idx_].pose.orientation.w = 1.0;
-                los_marker[ppcom_slf_idx_].lifetime = ros::Duration(0);
-                los_marker[ppcom_slf_idx_].id       = 0;
+                vizAidSelf.marker.header.frame_id = "world";
+                vizAidSelf.marker.ns       = "loop_marker";
+                vizAidSelf.marker.type     = visualization_msgs::Marker::LINE_LIST;
+                vizAidSelf.marker.action   = visualization_msgs::Marker::ADD;
+                vizAidSelf.marker.pose.orientation.w = 1.0;
+                vizAidSelf.marker.lifetime = ros::Duration(0);
+                vizAidSelf.marker.id       = 0;
 
-                los_marker[ppcom_slf_idx_].scale.x = 0.3;
-                los_marker[ppcom_slf_idx_].scale.y = 0.3;
-                los_marker[ppcom_slf_idx_].scale.z = 0.3;
+                vizAidSelf.marker.scale.x = 0.3;
+                vizAidSelf.marker.scale.y = 0.3;
+                vizAidSelf.marker.scale.z = 0.3;
 
-                los_marker[ppcom_slf_idx_].color.r = 0.0;
-                los_marker[ppcom_slf_idx_].color.g = 1.0;
-                los_marker[ppcom_slf_idx_].color.b = 1.0;
-                los_marker[ppcom_slf_idx_].color.a = 1.0;
+                vizAidSelf.marker.color.r = 0.0;
+                vizAidSelf.marker.color.g = 1.0;
+                vizAidSelf.marker.color.b = 1.0;
+                vizAidSelf.marker.color.a = 1.0;
     
-                color[ppcom_slf_idx_].r = 0.0;
-                color[ppcom_slf_idx_].g = 1.0;
-                color[ppcom_slf_idx_].b = 1.0;
-                color[ppcom_slf_idx_].a = 1.0;
+                vizAidSelf.color.r = 0.0;
+                vizAidSelf.color.g = 1.0;
+                vizAidSelf.color.b = 1.0;
+                vizAidSelf.color.a = 1.0;
+
+                vizAidSelf.inited = true;
             }
 
-            los_marker[ppcom_slf_idx_].points.clear();
-            los_marker[ppcom_slf_idx_].colors.clear();
+            vizAidSelf.marker.points.clear();
+            vizAidSelf.marker.colors.clear();
 
-            for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
+            for(PPComNode &ppcom_nbr : ppcom_nodes_)
             {
-                if (node_idx == ppcom_slf_idx_)
+                if (ppcom_nbr.name == ppcom_slf.name)
                     continue;
 
-                string node_id = ppcom_nodes_[node_idx].name;
+                // string node_id = ppcom_nodes_[node_idx].name;
 
-                if(los_check[node_idx])
+                if(los_check[ppcom_nbr.name])
                 {
                     geometry_msgs::Point point;
 
-                    los_marker[ppcom_slf_idx_].points.push_back(odom_msgs[ppcom_slf_idx_].pose.pose.position);
-                    los_marker[ppcom_slf_idx_].colors.push_back(color[ppcom_slf_idx_]);
+                    vizAidSelf.marker.points.push_back(ppcom_slf.odom_msg.pose.pose.position);
+                    vizAidSelf.marker.colors.push_back(vizAidSelf.color);
 
-                    los_marker[ppcom_slf_idx_].points.push_back(odom_msgs[node_idx].pose.pose.position);
-                    los_marker[ppcom_slf_idx_].colors.push_back(color[ppcom_slf_idx_]);
+                    vizAidSelf.marker.points.push_back(ppcom_nbr.odom_msg.pose.pose.position);
+                    vizAidSelf.marker.colors.push_back(vizAidSelf.color);
                 }
             }
 
-            los_marker_pub[ppcom_slf_idx_].publish(los_marker[ppcom_slf_idx_]);
+            vizAidSelf.rosPub.publish(vizAidSelf.marker);
         }
 
     }
-
-    // void GazeboPPComPlugin::CreatePubsAndSubs()
-    // {
-    //     // Create temporary "ConnectGazeboToRosTopic" publisher and message
-    //     gazebo::transport::PublisherPtr connect_gazebo_to_ros_topic_pub =
-    //         gz_node_handle_->Advertise<gz_std_msgs::ConnectGazeboToRosTopic>(
-    //             "~/" + kConnectGazeboToRosSubtopic, 1);
-
-    //     // ============================================ //
-    //     // =============== IMU MSG SETUP ============== //
-    //     // ============================================ //
-
-    //     ppcom_pub_ = gz_node_handle_->Advertise<gz_sensor_msgs::Imu>(
-    //         "~/" + namespace_ + "/" + ppcom_topic_, 1);
-
-    //     gz_std_msgs::ConnectGazeboToRosTopic connect_gazebo_to_ros_topic_msg;
-    //     // connect_gazebo_to_ros_topic_msg.set_gazebo_namespace(namespace_);
-    //     connect_gazebo_to_ros_topic_msg.set_gazebo_topic("~/" + namespace_ + "/" +
-    //                                                      ppcom_topic_);
-    //     connect_gazebo_to_ros_topic_msg.set_ros_topic(namespace_ + "/" + ppcom_topic_);
-    //     connect_gazebo_to_ros_topic_msg.set_msgtype(
-    //         gz_std_msgs::ConnectGazeboToRosTopic::IMU);
-    //     connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
-    //                                              true);
-    // }
 
     GZ_REGISTER_MODEL_PLUGIN(GazeboPPComPlugin);
 
