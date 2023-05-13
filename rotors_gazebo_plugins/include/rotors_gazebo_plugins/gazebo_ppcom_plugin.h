@@ -46,6 +46,8 @@
 
 #include "utility.h"
 
+using namespace std;
+
 namespace gazebo {
 
 class GazeboPPComPlugin : public ModelPlugin {
@@ -68,8 +70,8 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   void OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx);
 
-  std::string namespace_;
-  std::string ppcom_topic_;
+  string namespace_;
+  string ppcom_topic_;
 
   /// \brief  Handle for the Gazebo node.
   transport::NodePtr gz_node_handle_;
@@ -81,7 +83,7 @@ class GazeboPPComPlugin : public ModelPlugin {
   transport::PublisherPtr ppcom_pub_;
 
   /// \brief  Topic to publish the comm result
-  std::string self_link_name_;
+  string self_link_name_;
 
   /// \brief  Pointer to the world.
   physics::WorldPtr world_;
@@ -93,13 +95,14 @@ class GazeboPPComPlugin : public ModelPlugin {
   physics::PhysicsEnginePtr physics_;
   
   /// \brief  Id of the ppcom node
-  std::string ppcom_id_;
+  string ppcom_id_;
 
   /// \brief  Idx of the ppcom node
-  int ppcom_idx_;
+  int ppcom_slf_idx_;
 
   /// \brief  Path to the configuration of the network
-  std::string ppcom_config_;
+  string ppcom_config_;
+
 
   // Object to store the node info
   struct PPComNode
@@ -109,29 +112,33 @@ class GazeboPPComPlugin : public ModelPlugin {
     //  ~PPComNode();
      
       // Name of the node
-      std::string name = "";
+      string name = "";
 
       // Offset used to do ray tracing
       double offset = 0.0;
   };
 
+  /// \brief  Number of node in the network
+  int Nnodes_;
+
   /// \brief  Name of the nodes read from the ppcom_config_
-  std::vector<PPComNode> ppcom_nodes_;
+  vector<PPComNode> ppcom_nodes_;
 
   /// \brief  Pointer to the ray tracer
-  std::map<std::string, gazebo::physics::RayShapePtr> rays_;
+  vector<gazebo::physics::RayShapePtr> rays_;
 
   /// \brief  Subscriber to odometry data
-  std::map<std::string, ros::Subscriber> odom_sub;
+  vector<ros::Subscriber> odom_sub;
 
-  /// \brief  Subscriber to odometry data
-  std::map<std::string, nav_msgs::Odometry> odom_msgs;
+  /// \brief  Storaage of odometry data
+  vector<bool> odom_msgs_received;
+  vector<nav_msgs::Odometry> odom_msgs;
 
   /// \brief  Pointer to the update event connection.
   event::ConnectionPtr updateConnection_;
 
-  std::default_random_engine random_generator_;
-  std::normal_distribution<double> standard_normal_distribution_;
+  default_random_engine random_generator_;
+  normal_distribution<double> standard_normal_distribution_;
 
   common::Time last_time_;
 };
