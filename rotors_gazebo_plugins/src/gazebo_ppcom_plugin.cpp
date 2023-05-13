@@ -219,12 +219,14 @@ namespace gazebo
                         odom_msgs[ppcom_slf_idx_].pose.pose.position.z);
 
             vector<Vector3d> pA;
-            pA.push_back(ps + Vector3d(0, 0, ppcom_nodes_[ppcom_slf_idx_].offset));
-            pA.push_back(ps - Vector3d(0, 0, ppcom_nodes_[ppcom_slf_idx_].offset));
+            pA.push_back(ps + Vector3d(ppcom_nodes_[ppcom_slf_idx_].offset, 0, 0));
+            pA.push_back(ps - Vector3d(ppcom_nodes_[ppcom_slf_idx_].offset, 0, 0));
             pA.push_back(ps + Vector3d(0, ppcom_nodes_[ppcom_slf_idx_].offset, 0));
             pA.push_back(ps - Vector3d(0, ppcom_nodes_[ppcom_slf_idx_].offset, 0));
             pA.push_back(ps + Vector3d(0, 0, ppcom_nodes_[ppcom_slf_idx_].offset));
             pA.push_back(ps - Vector3d(0, 0, ppcom_nodes_[ppcom_slf_idx_].offset));
+            // Make sure the virtual antenna does not go below the ground
+            pA.back().z() = max(0.1, pA.back().z());
 
             vector<bool> los_check(Nnodes_, false);
             for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
@@ -245,12 +247,14 @@ namespace gazebo
                             odom_msgs[node_idx].pose.pose.position.z);
 
                 vector<Vector3d> pB;
-                pB.push_back(pe + Vector3d(0, 0, ppcom_nodes_[node_idx].offset));
-                pB.push_back(pe - Vector3d(0, 0, ppcom_nodes_[node_idx].offset));
+                pB.push_back(pe + Vector3d(ppcom_nodes_[node_idx].offset, 0, 0));
+                pB.push_back(pe - Vector3d(ppcom_nodes_[node_idx].offset, 0, 0));
                 pB.push_back(pe + Vector3d(0, ppcom_nodes_[node_idx].offset, 0));
                 pB.push_back(pe - Vector3d(0, ppcom_nodes_[node_idx].offset, 0));
                 pB.push_back(pe + Vector3d(0, 0, ppcom_nodes_[node_idx].offset));
                 pB.push_back(pe - Vector3d(0, 0, ppcom_nodes_[node_idx].offset));
+                // Make sure the virtual antenna does not go below the ground
+                pB.back().z() = max(0.1, pB.back().z());
 
                 // Ray tracing every pair to check the line of sight
                 double rtDist;           // Raytracing distance
@@ -301,11 +305,11 @@ namespace gazebo
                 // }
             }
 
-            // cout << "Thread: " << this_thread::get_id() << ". ";
-            // printf("Node %02d-%s. LOS check: ", ppcom_slf_idx_ + 1, ppcom_id_.c_str());
-            // for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
-            //     cout << los_check[node_idx] << " ";
-            // cout << endl;
+            cout << "Thread: " << this_thread::get_id() << ". ";
+            printf("Node %02d-%s. LOS check: ", ppcom_slf_idx_ + 1, ppcom_id_.c_str());
+            for(int node_idx = 0; node_idx < Nnodes_; node_idx++)
+                cout << los_check[node_idx] << " ";
+            cout << endl;
 
             typedef visualization_msgs::Marker RosVizMarker;
             typedef std_msgs::ColorRGBA RosVizColor;
