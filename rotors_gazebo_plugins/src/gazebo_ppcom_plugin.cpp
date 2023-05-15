@@ -276,6 +276,19 @@ namespace gazebo
                 ros::Publisher rosPub = RosPub();
             };
 
+            // Predefined colors
+            static RosVizColor los_color;
+            los_color.r = 0.0;
+            los_color.g = 1.0;
+            los_color.b = 1.0;
+            los_color.a = 1.0;
+
+            static RosVizColor nlos_color;
+            nlos_color.r = 1.0;
+            nlos_color.g = 0.0;
+            nlos_color.b = 0.0;
+            nlos_color.a = 1.0;
+
             // Create the los marker
             static vector<VizAid> vizAid(Nnodes_);
             VizAid &vizAidSelf = vizAid[ppcom_slf_idx_];
@@ -303,10 +316,7 @@ namespace gazebo
                 vizAidSelf.marker.color.b = 1.0;
                 vizAidSelf.marker.color.a = 1.0;
     
-                vizAidSelf.color.r = 0.0;
-                vizAidSelf.color.g = 1.0;
-                vizAidSelf.color.b = 1.0;
-                vizAidSelf.color.a = 1.0;
+                vizAidSelf.color = los_color;
 
                 vizAidSelf.inited = true;
             }
@@ -320,12 +330,22 @@ namespace gazebo
                 {
                     if(los_check[i][j])
                     {
+
                         vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
-                        vizAidSelf.marker.colors.push_back(vizAidSelf.color);
+                        vizAidSelf.marker.colors.push_back(los_color);
 
                         vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
-                        vizAidSelf.marker.colors.push_back(vizAidSelf.color);
+                        vizAidSelf.marker.colors.push_back(los_color);
                     }
+                    else
+                    {
+                        vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
+                        vizAidSelf.marker.colors.push_back(nlos_color);
+
+                        vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
+                        vizAidSelf.marker.colors.push_back(nlos_color);
+                    }
+                    
                 }
             }
 

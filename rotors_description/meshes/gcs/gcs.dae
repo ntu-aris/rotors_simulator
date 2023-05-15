@@ -15,7 +15,7 @@
       <profile_COMMON>
         <newparam sid="LP_Material_BaseColor_png-surface">
           <surface type="2D">
-            <init_from>LP_Material_BaseColor_png</init_from>
+            <init_from>/home/tmn/ws_caric/src/rotors_simulator/rotors_description/meshes/gcs/LP_Material_BaseColor.png</init_from>
           </surface>
         </newparam>
         <newparam sid="LP_Material_BaseColor_png-sampler">
