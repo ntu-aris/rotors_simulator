@@ -190,7 +190,6 @@ namespace gazebo
                 = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
 
             // Create the storage of nodes to each object
-            node.odom_msg = nav_msgs::Odometry();
             node.odom_msg_received = false;
 
             // Create rayshape object
@@ -383,6 +382,7 @@ namespace gazebo
                 topo_msg.node_id.push_back(node.name);
                 topo_msg.node_role.push_back(node.role);
                 topo_msg.node_odom.push_back(node.odom_msg);
+                printf("Node %s. OdomCov: %f\n", node.name.c_str(), node.odom_msg.pose.covariance[0]);
             }
             
             topo_msg.range.clear();
