@@ -1,7 +1,13 @@
 Header header
 
 # IDs of the nodes
-string[] node_ids
+string[] node_id
 
-# Distance measurent as 1xNN array from the NxN disMatrix
-float32[] ranges
+# Role of the node
+string[] node_role
+
+# Role of the node
+nav_msgs/Odometry[] node_odom
+
+# Distance measurent as 1xM array from the NxN disMatrix
+float32[] range

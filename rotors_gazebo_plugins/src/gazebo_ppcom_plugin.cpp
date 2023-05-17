@@ -51,9 +51,19 @@ using namespace std;
 namespace gazebo
 {
     // PPCom class, helper of the plugin
-    PPComNode::PPComNode() {}
+    PPComNode::PPComNode()
+    {
+        // Set cov diagonal to -1 to indicate no reception yet
+        for(auto &c : this->odom_msg.pose.covariance)
+            c = -1;
+    }
     PPComNode::PPComNode(const string &name_, const string &role_, const double &offset_)
-        : name(name_), role(role_), offset(offset_)  {}
+        : name(name_), role(role_), offset(offset_)
+    {
+        // Set cov diagonal this to -1 to indicate no reception yet
+        for(auto &c : this->odom_msg.pose.covariance)
+            c = -1;
+    }
         
     PPComNode::~PPComNode() {}
 
@@ -103,6 +113,11 @@ namespace gazebo
             ppcom_config_ = _sdf->GetElement("ppcomConfig")->Get<string>();
         else
             gzerr << "[gazebo_ppcom_plugin] Please specify ppcomConfig.\n";
+
+        if (_sdf->HasElement("ppcomHz"))
+            ppcom_hz_ = _sdf->GetElement("ppcomHz")->Get<double>();
+        else
+            gzerr << "[gazebo_ppcom_plugin] Please specify a ppcomId.\n";
 
         // Get the ppcom topic where data is published to
         getSdfParam<string>(_sdf, "ppcomTopic", ppcom_topic_, "ppcom");
@@ -220,11 +235,11 @@ namespace gazebo
             return;
 
         // Update the ray casting every 0.1s
-        if (dt > 0.1)
+        if (dt > 1.0/ppcom_hz_)
         {
             last_time_ = current_time;
 
-            Eigen::MatrixXd distMat = Eigen::MatrixXd::Zero(Nnodes_, Nnodes_);
+            Eigen::MatrixXd distMat = -1*Eigen::MatrixXd::Ones(Nnodes_, Nnodes_);
             vector<vector<bool>> los_check(Nnodes_, vector<bool>(Nnodes_, false));
 
             for(int i = 0; i < Nnodes_; i ++)
@@ -257,7 +272,10 @@ namespace gazebo
                     
                     // Assign the distance if there is line of sight
                     if (los_check[i][j])
-                        distMat(i, j) = distMat(j, i) = (pi - pj).norm();
+                    {
+                        distMat(i, j) = (pi - pj).norm();
+                        distMat(j, i) = distMat(i, j);
+                    }
                 }
             }
             
@@ -280,12 +298,12 @@ namespace gazebo
             static RosVizColor los_color;
             los_color.r = 0.0;
             los_color.g = 1.0;
-            los_color.b = 1.0;
+            los_color.b = 0.5;
             los_color.a = 1.0;
 
             static RosVizColor nlos_color;
             nlos_color.r = 1.0;
-            nlos_color.g = 0.0;
+            nlos_color.g = 0.65;
             nlos_color.b = 0.0;
             nlos_color.a = 1.0;
 
@@ -307,9 +325,9 @@ namespace gazebo
                 vizAidSelf.marker.lifetime = ros::Duration(0);
                 vizAidSelf.marker.id       = 0;
 
-                vizAidSelf.marker.scale.x = 0.3;
-                vizAidSelf.marker.scale.y = 0.3;
-                vizAidSelf.marker.scale.z = 0.3;
+                vizAidSelf.marker.scale.x = 0.15;
+                vizAidSelf.marker.scale.y = 0.15;
+                vizAidSelf.marker.scale.z = 0.15;
 
                 vizAidSelf.marker.color.r = 0.0;
                 vizAidSelf.marker.color.g = 1.0;
@@ -337,7 +355,7 @@ namespace gazebo
                         vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
                         vizAidSelf.marker.colors.push_back(los_color);
                     }
-                    else
+                    else if(ppcom_nodes_[i].odom_msg_received && ppcom_nodes_[j].odom_msg_received)
                     {
                         vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
                         vizAidSelf.marker.colors.push_back(nlos_color);
@@ -359,14 +377,18 @@ namespace gazebo
             topo_msg.header.frame_id = "world";
             topo_msg.header.stamp = ros::Time::now();
 
-            topo_msg.node_ids.clear();
+            topo_msg.node_id.clear();
             for(PPComNode &node : ppcom_nodes_)
-                topo_msg.node_ids.push_back(node.name);
+            {
+                topo_msg.node_id.push_back(node.name);
+                topo_msg.node_role.push_back(node.role);
+                topo_msg.node_odom.push_back(node.odom_msg);
+            }
             
-            topo_msg.ranges.clear();
+            topo_msg.range.clear();
             for(int i = 0; i < Nnodes_; i++)
                 for(int j = i+1; j < Nnodes_; j++)
-                    topo_msg.ranges.push_back(distMat(i, j));
+                    topo_msg.range.push_back(distMat(i, j));
             
             ppcom_nodes_[ppcom_slf_idx_].topo_pub.publish(topo_msg);
         }

@@ -62,15 +62,21 @@
   <!-- Mount a PPCom-sensor in the center of body. -->
   <!-- <xacro:ppcom_plugin_macro
       namespace="${namespace}"
-      ppcom_suffix=""
       parent_link="${namespace}/base_link"
+      mass="0.015"
+      ppcom_suffix=""
       ppcom_topic="ppcom"
-      mass_ppcom_sensor="0.015"
       ppcom_id="${ppcom_id}"
       ppcom_config="${ppcom_config}"
   >
     <inertia ixx="0.00001" ixy="0.0" ixz="0.0" iyy="0.00001" iyz="0.0" izz="0.00001" />
     <origin xyz="0.0 0.0 0.0" rpy="0 0 0" />
   </xacro:ppcom_plugin_macro> -->
+
+  <!-- <sensor name='my_contact' type='contact'>
+    <contact>
+      <collision>box_collision</collision>
+    </contact>
+  </sensor> -->
 
 </robot>

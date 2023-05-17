@@ -41,7 +41,6 @@
 // #include "Imu.pb.h"
 
 #include "rotors_gazebo_plugins/common.h"
-#include "rotors_gazebo_plugins/common.h"
 // #include "rotors_gazebo_plugins/gazebo_ros_interface_plugin.h"
 
 #include "utility.h"
@@ -128,6 +127,9 @@ class GazeboPPComPlugin : public ModelPlugin {
   
   /// \brief  Id of the ppcom node
   string ppcom_id_;
+
+  /// \brief  Update time for the topology
+  double ppcom_hz_;  
 
   /// \brief  Idx of the ppcom node
   int ppcom_slf_idx_;
