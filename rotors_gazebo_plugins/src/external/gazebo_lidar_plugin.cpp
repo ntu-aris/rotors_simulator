@@ -88,7 +88,7 @@ void GazeboLidarPlugin::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
 
   const string scopedName = _parent->ParentName();
 
-  string topicName = "~/" + scopedName + "/lidar";
+  string topicName = "/" + scopedName + "/lidar";
   boost::replace_all(topicName, "::", "/");
 
   lidar_pub_ = node_handle_->Advertise<lidar_msgs::msgs::lidar>(topicName, 10);
