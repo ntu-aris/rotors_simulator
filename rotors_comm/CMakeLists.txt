@@ -14,6 +14,7 @@ add_message_files(
   FILES
   WindSpeed.msg
   PPComTopology.msg
+  BoolStamped.msg
 )
 
 generate_messages(DEPENDENCIES geometry_msgs octomap_msgs std_msgs nav_msgs)
