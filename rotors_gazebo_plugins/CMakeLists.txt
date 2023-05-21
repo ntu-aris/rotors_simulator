@@ -122,6 +122,8 @@ if (NOT NO_ROS)
     rotors_control
     std_srvs
     tf
+    pcl_conversions
+    pcl_ros
   )
 endif()
 
@@ -534,6 +536,14 @@ if (NOT NO_ROS)
   target_link_libraries(rotors_gazebo_ppcom_plugin ${target_linking_LIBRARIES} )
   add_dependencies(rotors_gazebo_ppcom_plugin ${catkin_EXPORTED_TARGETS})
   list(APPEND targets_to_install rotors_gazebo_ppcom_plugin)
+endif()
+
+#========================================= CARIC PLUGIN =========================================//
+if (NOT NO_ROS)
+  add_library(rotors_gazebo_caric_plugin SHARED src/gazebo_caric_plugin.cpp)
+  target_link_libraries(rotors_gazebo_caric_plugin ${target_linking_LIBRARIES} )
+  add_dependencies(rotors_gazebo_caric_plugin ${catkin_EXPORTED_TARGETS})
+  list(APPEND targets_to_install rotors_gazebo_caric_plugin)
 endif()
 
 # =============================================================================================== #

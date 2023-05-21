@@ -960,6 +960,57 @@
         </gazebo>
     </xacro:macro>
 
+    <!-- Macro to add a caric sensor. -->
+    <xacro:macro name="caric_plugin_macro"
+        params="namespace parent_link mass
+                ppcom_config interest_config ppcom_topic ppcom_hz
+                cam_x cam_y cam_z
+                *inertia *origin">
+        <!-- IMU link -->
+        <link name="${namespace}/caric_link">
+            <inertial>
+                <xacro:insert_block name="inertia" />
+                <mass value="${mass}" />  <!-- [kg] -->
+                <origin xyz="0 0 0" rpy="0 0 0" />
+            </inertial>
+        </link>
+        <!-- IMU joint -->
+        <joint name="${namespace}/caric_joint" type="revolute">
+            <xacro:insert_block name="origin" />
+            <parent link="${parent_link}" />
+            <child link="${namespace}/caric_link" />
+            <limit upper="0" lower="0" effort="0" velocity="0" />
+        </joint>
+        <gazebo>
+            <plugin filename="librotors_gazebo_caric_plugin.so" name="rotors_gazebo_caric_plugin">
+
+                <!-- A good description of the IMU parameters can be found in the kalibr
+                documentation: https://github.com/ethz-asl/kalibr/wiki/IMU-Noise-Model-and-Intrinsics -->
+
+                <!-- (string, required): ros namespace in which the messages are published -->
+                <robotNamespace>${namespace}</robotNamespace>
+
+                <!-- (string, required): name of the body which holds the IMU sensor -->
+                <linkName>${namespace}/caric_link</linkName>
+
+                <!-- (string): name of the sensor output topic and prefix of service names (defaults to ppcom) -->
+                <ppcomTopic>${ppcom_topic}</ppcomTopic>
+
+                <!-- (string): Path to the network configuration of PPCom-->
+                <ppcomConfig>${ppcom_config}</ppcomConfig>
+
+                <!-- (double): Update period of the ppcom -->
+                <ppcomHz>${ppcom_hz}</ppcomHz>
+
+                <interestPcd>${interest_config}</interestPcd>
+                
+                <cam_x>${cam_x}</cam_x>
+                <cam_y>${cam_y}</cam_y>
+                <cam_z>${cam_z}</cam_z>                
+            </plugin>
+        </gazebo>
+    </xacro:macro>
+
     <xacro:macro name="ground_truth_imu_and_odometry" params="namespace parent_link">
         <!-- Mount an IMU providing ground truth. -->
         <xacro:imu_plugin_macro
