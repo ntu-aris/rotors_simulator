@@ -18,6 +18,8 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
 
 set(BUILD_OCTOMAP_PLUGIN TRUE)
 
+find_package(PCL REQUIRED)
+
 #
 #if ( ${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR} )
 #  message( FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt." )
@@ -355,7 +357,7 @@ endif()
 #======================================== LIDAR PLUGIN ==========================================//
 if(${gazebo_VERSION_MAJOR} GREATER 4)
   add_library(rotors_gazebo_lidar_plugin SHARED src/external/gazebo_lidar_plugin.cpp)
-  target_link_libraries(rotors_gazebo_lidar_plugin ${target_linking_LIBRARIES} )
+  target_link_libraries(rotors_gazebo_lidar_plugin ${target_linking_LIBRARIES} ${PCL_LIBRARIES})
   if (NOT NO_ROS)
     add_dependencies(rotors_gazebo_lidar_plugin ${catkin_EXPORTED_TARGETS})
   endif()

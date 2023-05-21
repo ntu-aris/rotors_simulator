@@ -904,6 +904,8 @@
     </xacro:macro>
 
     <!-- Macro to add a lidar -->
+    <!-- horz_sample horz_res horz_anglemin horz_anglemax
+    vert_sample vert_res vert_anglemin vert_anglemax -->
     <xacro:macro name="lidars_plugin_macro"
         params="namespace parent_link mass lidar_suffix
                 *inertia *origin">
@@ -928,13 +930,13 @@
                 <ray>
                     <scan>
                         <horizontal>
-                            <samples>1024</samples>
+                            <samples>2</samples>
                             <resolution>1</resolution>
                             <min_angle>0</min_angle>
                             <max_angle>6.29</max_angle>
                         </horizontal>
                         <vertical>
-                            <samples>16</samples>
+                            <samples>2</samples>
                             <resolution>1</resolution>
                             <min_angle>-0.39269908169</min_angle>
                             <max_angle>0.39269908169</max_angle>
@@ -942,7 +944,7 @@
                     </scan>
                     <range>
                         <min>0.06</min>
-                        <max>25</max>
+                        <max>50</max>
                         <resolution>0.01</resolution>
                     </range>
                     <noise>
@@ -954,8 +956,8 @@
                 <plugin name="LaserPlugin" filename="librotors_gazebo_lidar_plugin.so"/>
                 <robotNamespace>${namespace}</robotNamespace>
                 <always_on>1</always_on>
-                <update_rate>1</update_rate>
-                <visualize>false</visualize>
+                <update_rate>0.25</update_rate>
+                <visualize>true</visualize>
             </sensor>
         </gazebo>
     </xacro:macro>

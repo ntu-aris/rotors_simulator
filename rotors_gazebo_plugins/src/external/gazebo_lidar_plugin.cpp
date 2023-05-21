@@ -38,16 +38,21 @@
 
 #include "rotors_gazebo_plugins/common.h"
 
+#include <ros/ros.h>
+#include <sensor_msgs/PointCloud2.h>
+
+#include <pcl/pcl_base.h>
+#include <pcl/impl/pcl_base.hpp>
+
 using namespace gazebo;
 using namespace std;
+using namespace pcl;
 
 // Register this plugin with the simulator
 GZ_REGISTER_SENSOR_PLUGIN(GazeboLidarPlugin)
 
 
-GazeboLidarPlugin::GazeboLidarPlugin()
-{
-}
+GazeboLidarPlugin::GazeboLidarPlugin(){}
 
 
 GazeboLidarPlugin::~GazeboLidarPlugin()
@@ -83,8 +88,11 @@ void GazeboLidarPlugin::Load(sensors::SensorPtr _parent, sdf::ElementPtr _sdf)
   else
     gzwarn << "[gazebo_lidar_plugin] Please specify a robotNamespace.\n";
 
+  // Init gazebo node
   node_handle_ = transport::NodePtr(new transport::Node());
   node_handle_->Init(namespace_);
+
+  // Init ros node
 
   const string scopedName = _parent->ParentName();
 
@@ -101,6 +109,8 @@ void GazeboLidarPlugin::OnNewLaserScans()
   lidar_message.set_min_distance(parentSensor->RangeMin());
   lidar_message.set_max_distance(parentSensor->RangeMax());
   lidar_message.set_current_distance(parentSensor->Range(0));
+
+  
 
   lidar_pub_->Publish(lidar_message);
 }
