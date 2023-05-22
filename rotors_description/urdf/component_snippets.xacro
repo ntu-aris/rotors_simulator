@@ -1015,7 +1015,7 @@
 
     <xacro:macro name="ground_truth_imu_and_odometry" params="namespace parent_link">
         <!-- Mount an IMU providing ground truth. -->
-        <xacro:imu_plugin_macro
+        <!-- <xacro:imu_plugin_macro
             namespace="${namespace}"
             imu_suffix="gt"
             parent_link="${parent_link}"
@@ -1031,7 +1031,7 @@
             accelerometer_turn_on_bias_sigma="0.0">
             <inertia ixx="0.00001" ixy="0.0" ixz="0.0" iyy="0.00001" iyz="0.0" izz="0.00001" />
             <origin xyz="0 0 0" rpy="0 0 0" />
-        </xacro:imu_plugin_macro>
+        </xacro:imu_plugin_macro> -->
 
         <!-- Mount a generic odometry sensor providing ground truth. -->
         <xacro:odometry_plugin_macro

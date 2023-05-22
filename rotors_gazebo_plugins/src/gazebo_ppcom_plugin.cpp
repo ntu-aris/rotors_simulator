@@ -281,92 +281,92 @@ namespace gazebo
             
             /* #region Publish visualization of the topology --------------------------------------------------------*/
 
-            typedef visualization_msgs::Marker RosVizMarker;
-            typedef std_msgs::ColorRGBA RosVizColor;
-            typedef ros::Publisher RosPub;
+            // typedef visualization_msgs::Marker RosVizMarker;
+            // typedef std_msgs::ColorRGBA RosVizColor;
+            // typedef ros::Publisher RosPub;
 
-            struct VizAid
-            {
-                bool           inited = false;
-                RosVizColor    color  = RosVizColor();
-                RosVizMarker   marker = RosVizMarker();
-                ros::Publisher rosPub = RosPub();
-            };
+            // struct VizAid
+            // {
+            //     bool           inited = false;
+            //     RosVizColor    color  = RosVizColor();
+            //     RosVizMarker   marker = RosVizMarker();
+            //     ros::Publisher rosPub = RosPub();
+            // };
 
-            // Predefined colors
-            static RosVizColor los_color;
-            los_color.r = 0.0;
-            los_color.g = 1.0;
-            los_color.b = 0.5;
-            los_color.a = 1.0;
+            // // Predefined colors
+            // static RosVizColor los_color;
+            // los_color.r = 0.0;
+            // los_color.g = 1.0;
+            // los_color.b = 0.5;
+            // los_color.a = 1.0;
 
-            static RosVizColor nlos_color;
-            nlos_color.r = 1.0;
-            nlos_color.g = 0.65;
-            nlos_color.b = 0.0;
-            nlos_color.a = 1.0;
+            // static RosVizColor nlos_color;
+            // nlos_color.r = 1.0;
+            // nlos_color.g = 0.65;
+            // nlos_color.b = 0.0;
+            // nlos_color.a = 1.0;
 
-            // Create the los marker
-            static vector<VizAid> vizAid(Nnodes_);
-            VizAid &vizAidSelf = vizAid[ppcom_slf_idx_];
+            // // Create the los marker
+            // static vector<VizAid> vizAid(Nnodes_);
+            // VizAid &vizAidSelf = vizAid[ppcom_slf_idx_];
             
-            // Initialize the loop marker
-            if (!vizAidSelf.inited)
-            {
-                vizAidSelf.rosPub = ros_node_handle_->advertise<RosVizMarker>("/" + ppcom_id_ + "/los_marker", 1);
+            // // Initialize the loop marker
+            // if (!vizAidSelf.inited)
+            // {
+            //     vizAidSelf.rosPub = ros_node_handle_->advertise<RosVizMarker>("/" + ppcom_id_ + "/los_marker", 1);
 
-                // Set up the loop marker
-                vizAidSelf.marker.header.frame_id = "world";
-                vizAidSelf.marker.ns       = "loop_marker";
-                vizAidSelf.marker.type     = visualization_msgs::Marker::LINE_LIST;
-                vizAidSelf.marker.action   = visualization_msgs::Marker::ADD;
-                vizAidSelf.marker.pose.orientation.w = 1.0;
-                vizAidSelf.marker.lifetime = ros::Duration(0);
-                vizAidSelf.marker.id       = 0;
+            //     // Set up the loop marker
+            //     vizAidSelf.marker.header.frame_id = "world";
+            //     vizAidSelf.marker.ns       = "loop_marker";
+            //     vizAidSelf.marker.type     = visualization_msgs::Marker::LINE_LIST;
+            //     vizAidSelf.marker.action   = visualization_msgs::Marker::ADD;
+            //     vizAidSelf.marker.pose.orientation.w = 1.0;
+            //     vizAidSelf.marker.lifetime = ros::Duration(0);
+            //     vizAidSelf.marker.id       = 0;
 
-                vizAidSelf.marker.scale.x = 0.15;
-                vizAidSelf.marker.scale.y = 0.15;
-                vizAidSelf.marker.scale.z = 0.15;
+            //     vizAidSelf.marker.scale.x = 0.15;
+            //     vizAidSelf.marker.scale.y = 0.15;
+            //     vizAidSelf.marker.scale.z = 0.15;
 
-                vizAidSelf.marker.color.r = 0.0;
-                vizAidSelf.marker.color.g = 1.0;
-                vizAidSelf.marker.color.b = 1.0;
-                vizAidSelf.marker.color.a = 1.0;
+            //     vizAidSelf.marker.color.r = 0.0;
+            //     vizAidSelf.marker.color.g = 1.0;
+            //     vizAidSelf.marker.color.b = 1.0;
+            //     vizAidSelf.marker.color.a = 1.0;
     
-                vizAidSelf.color = los_color;
+            //     vizAidSelf.color = los_color;
 
-                vizAidSelf.inited = true;
-            }
+            //     vizAidSelf.inited = true;
+            // }
 
-            vizAidSelf.marker.points.clear();
-            vizAidSelf.marker.colors.clear();
+            // vizAidSelf.marker.points.clear();
+            // vizAidSelf.marker.colors.clear();
 
-            for(int i = 0; i < Nnodes_; i++)
-            {
-                for (int j = i+1; j < Nnodes_; j++)
-                {
-                    if(los_check[i][j])
-                    {
+            // for(int i = 0; i < Nnodes_; i++)
+            // {
+            //     for (int j = i+1; j < Nnodes_; j++)
+            //     {
+            //         if(los_check[i][j])
+            //         {
 
-                        vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
-                        vizAidSelf.marker.colors.push_back(los_color);
+            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
+            //             vizAidSelf.marker.colors.push_back(los_color);
 
-                        vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
-                        vizAidSelf.marker.colors.push_back(los_color);
-                    }
-                    else if(ppcom_nodes_[i].odom_msg_received && ppcom_nodes_[j].odom_msg_received)
-                    {
-                        vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
-                        vizAidSelf.marker.colors.push_back(nlos_color);
+            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
+            //             vizAidSelf.marker.colors.push_back(los_color);
+            //         }
+            //         else if(ppcom_nodes_[i].odom_msg_received && ppcom_nodes_[j].odom_msg_received)
+            //         {
+            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
+            //             vizAidSelf.marker.colors.push_back(nlos_color);
 
-                        vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
-                        vizAidSelf.marker.colors.push_back(nlos_color);
-                    }
+            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
+            //             vizAidSelf.marker.colors.push_back(nlos_color);
+            //         }
                     
-                }
-            }
+            //     }
+            // }
 
-            vizAidSelf.rosPub.publish(vizAidSelf.marker);
+            // vizAidSelf.rosPub.publish(vizAidSelf.marker);
 
             /* #endregion Publish visualization of the topology -----------------------------------------------------*/
 

@@ -228,11 +228,11 @@ void GazeboMotorModel::OnUpdate(const common::UpdateInfo& _info) {
 void GazeboMotorModel::CreatePubsAndSubs() {
   gzdbg << __PRETTY_FUNCTION__ << " called." << std::endl;
 
-  // Create temporary "ConnectGazeboToRosTopic" publisher and message
-  gazebo::transport::PublisherPtr gz_connect_gazebo_to_ros_topic_pub =
-      node_handle_->Advertise<gz_std_msgs::ConnectGazeboToRosTopic>(
-          "~/" + kConnectGazeboToRosSubtopic, 1);
-  gz_std_msgs::ConnectGazeboToRosTopic connect_gazebo_to_ros_topic_msg;
+  // // Create temporary "ConnectGazeboToRosTopic" publisher and message
+  // gazebo::transport::PublisherPtr gz_connect_gazebo_to_ros_topic_pub =
+  //     node_handle_->Advertise<gz_std_msgs::ConnectGazeboToRosTopic>(
+  //         "~/" + kConnectGazeboToRosSubtopic, 1);
+  // gz_std_msgs::ConnectGazeboToRosTopic connect_gazebo_to_ros_topic_msg;
 
   // Create temporary "ConnectRosToGazeboTopic" publisher and message
   gazebo::transport::PublisherPtr gz_connect_ros_to_gazebo_topic_pub =
@@ -247,14 +247,14 @@ void GazeboMotorModel::CreatePubsAndSubs() {
     motor_velocity_pub_ = node_handle_->Advertise<gz_std_msgs::Float32>(
         "~/" + namespace_ + "/" + motor_speed_pub_topic_, 1);
 
-    connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
-        "~/" + namespace_ + "/" + motor_speed_pub_topic_);
-    connect_gazebo_to_ros_topic_msg.set_ros_topic(
-        namespace_ + "/" + motor_speed_pub_topic_);
-    connect_gazebo_to_ros_topic_msg.set_msgtype(
-        gz_std_msgs::ConnectGazeboToRosTopic::FLOAT_32);
-    gz_connect_gazebo_to_ros_topic_pub->Publish(
-        connect_gazebo_to_ros_topic_msg, true);
+    // connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
+    //     "~/" + namespace_ + "/" + motor_speed_pub_topic_);
+    // connect_gazebo_to_ros_topic_msg.set_ros_topic(
+    //     namespace_ + "/" + motor_speed_pub_topic_);
+    // connect_gazebo_to_ros_topic_msg.set_msgtype(
+    //     gz_std_msgs::ConnectGazeboToRosTopic::FLOAT_32);
+    // gz_connect_gazebo_to_ros_topic_pub->Publish(
+    //     connect_gazebo_to_ros_topic_msg, true);
   }
 
   // =============================================== //
@@ -265,14 +265,14 @@ void GazeboMotorModel::CreatePubsAndSubs() {
     motor_position_pub_ = node_handle_->Advertise<gz_std_msgs::Float32>(
         "~/" + namespace_ + "/" + motor_position_pub_topic_, 1);
 
-    connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
-        "~/" + namespace_ + "/" + motor_position_pub_topic_);
-    connect_gazebo_to_ros_topic_msg.set_ros_topic(
-        namespace_ + "/" + motor_position_pub_topic_);
-    connect_gazebo_to_ros_topic_msg.set_msgtype(
-        gz_std_msgs::ConnectGazeboToRosTopic::FLOAT_32);
-    gz_connect_gazebo_to_ros_topic_pub->Publish(
-        connect_gazebo_to_ros_topic_msg, true);
+    // connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
+    //     "~/" + namespace_ + "/" + motor_position_pub_topic_);
+    // connect_gazebo_to_ros_topic_msg.set_ros_topic(
+    //     namespace_ + "/" + motor_position_pub_topic_);
+    // connect_gazebo_to_ros_topic_msg.set_msgtype(
+    //     gz_std_msgs::ConnectGazeboToRosTopic::FLOAT_32);
+    // gz_connect_gazebo_to_ros_topic_pub->Publish(
+    //     connect_gazebo_to_ros_topic_msg, true);
   }
 
   // ============================================ //
@@ -283,14 +283,14 @@ void GazeboMotorModel::CreatePubsAndSubs() {
     motor_force_pub_ = node_handle_->Advertise<gz_std_msgs::Float32>(
         "~/" + namespace_ + "/" + motor_force_pub_topic_, 1);
 
-    connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
-        "~/" + namespace_ + "/" + motor_force_pub_topic_);
-    connect_gazebo_to_ros_topic_msg.set_ros_topic(
-        namespace_ + "/" + motor_force_pub_topic_);
-    connect_gazebo_to_ros_topic_msg.set_msgtype(
-        gz_std_msgs::ConnectGazeboToRosTopic::FLOAT_32);
-    gz_connect_gazebo_to_ros_topic_pub->Publish(
-        connect_gazebo_to_ros_topic_msg, true);
+    // connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
+    //     "~/" + namespace_ + "/" + motor_force_pub_topic_);
+    // connect_gazebo_to_ros_topic_msg.set_ros_topic(
+    //     namespace_ + "/" + motor_force_pub_topic_);
+    // connect_gazebo_to_ros_topic_msg.set_msgtype(
+    //     gz_std_msgs::ConnectGazeboToRosTopic::FLOAT_32);
+    // gz_connect_gazebo_to_ros_topic_pub->Publish(
+    //     connect_gazebo_to_ros_topic_msg, true);
   }
 
   // ============================================ //
@@ -319,14 +319,14 @@ void GazeboMotorModel::CreatePubsAndSubs() {
       "~/" + namespace_ + "/" + wind_speed_sub_topic_,
       &GazeboMotorModel::WindSpeedCallback, this);
 
-  connect_ros_to_gazebo_topic_msg.set_ros_topic(
-      namespace_ + "/" + wind_speed_sub_topic_);
-  connect_ros_to_gazebo_topic_msg.set_gazebo_topic(
-      "~/" + namespace_ + "/" + wind_speed_sub_topic_);
-  connect_ros_to_gazebo_topic_msg.set_msgtype(
-      gz_std_msgs::ConnectRosToGazeboTopic::WIND_SPEED);
-  gz_connect_ros_to_gazebo_topic_pub->Publish(
-      connect_ros_to_gazebo_topic_msg, true);
+  // connect_ros_to_gazebo_topic_msg.set_ros_topic(
+  //     namespace_ + "/" + wind_speed_sub_topic_);
+  // connect_ros_to_gazebo_topic_msg.set_gazebo_topic(
+  //     "~/" + namespace_ + "/" + wind_speed_sub_topic_);
+  // connect_ros_to_gazebo_topic_msg.set_msgtype(
+  //     gz_std_msgs::ConnectRosToGazeboTopic::WIND_SPEED);
+  // gz_connect_ros_to_gazebo_topic_pub->Publish(
+  //     connect_ros_to_gazebo_topic_msg, true);
 }
 
 void GazeboMotorModel::ControlCommandCallback(

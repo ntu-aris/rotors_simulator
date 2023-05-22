@@ -105,14 +105,14 @@ void GazeboOdometryPlugin::Load(physics::ModelPtr _model,
     random_generator_.seed(
         std::chrono::system_clock::now().time_since_epoch().count());
   }
-  getSdfParam<std::string>(_sdf, "poseTopic", pose_pub_topic_, pose_pub_topic_);
-  getSdfParam<std::string>(_sdf, "poseWithCovarianceTopic",
-                           pose_with_covariance_stamped_pub_topic_,
-                           pose_with_covariance_stamped_pub_topic_);
-  getSdfParam<std::string>(_sdf, "positionTopic", position_stamped_pub_topic_,
-                           position_stamped_pub_topic_);
-  getSdfParam<std::string>(_sdf, "transformTopic", transform_stamped_pub_topic_,
-                           transform_stamped_pub_topic_);
+//   getSdfParam<std::string>(_sdf, "poseTopic", pose_pub_topic_, pose_pub_topic_);
+//   getSdfParam<std::string>(_sdf, "poseWithCovarianceTopic",
+//                            pose_with_covariance_stamped_pub_topic_,
+//                            pose_with_covariance_stamped_pub_topic_);
+//   getSdfParam<std::string>(_sdf, "positionTopic", position_stamped_pub_topic_,
+//                            position_stamped_pub_topic_);
+//   getSdfParam<std::string>(_sdf, "transformTopic", transform_stamped_pub_topic_,
+//                            transform_stamped_pub_topic_);
   getSdfParam<std::string>(_sdf, "odometryTopic", odometry_pub_topic_,
                            odometry_pub_topic_);
   getSdfParam<std::string>(_sdf, "parentFrameId", parent_frame_id_,
@@ -435,47 +435,47 @@ void GazeboOdometryPlugin::OnUpdate(const common::UpdateInfo& _info) {
     }
 
     // Publish all the topics, for which the topic name is specified.
-    if (pose_pub_->HasConnections()) {
-      pose_pub_->Publish(odometry_msg.pose().pose());
-    }
+    // if (pose_pub_->HasConnections()) {
+    //   pose_pub_->Publish(odometry_msg.pose().pose());
+    // }
 
-    if (pose_with_covariance_stamped_pub_->HasConnections()) {
-      gz_geometry_msgs::PoseWithCovarianceStamped
-          pose_with_covariance_stamped_msg;
+    // if (pose_with_covariance_stamped_pub_->HasConnections()) {
+    //   gz_geometry_msgs::PoseWithCovarianceStamped
+    //       pose_with_covariance_stamped_msg;
 
-      pose_with_covariance_stamped_msg.mutable_header()->CopyFrom(
-          odometry_msg.header());
-      pose_with_covariance_stamped_msg.mutable_pose_with_covariance()->CopyFrom(
-          odometry_msg.pose());
+    //   pose_with_covariance_stamped_msg.mutable_header()->CopyFrom(
+    //       odometry_msg.header());
+    //   pose_with_covariance_stamped_msg.mutable_pose_with_covariance()->CopyFrom(
+    //       odometry_msg.pose());
 
-      pose_with_covariance_stamped_pub_->Publish(
-          pose_with_covariance_stamped_msg);
-    }
+    //   pose_with_covariance_stamped_pub_->Publish(
+    //       pose_with_covariance_stamped_msg);
+    // }
 
-    if (position_stamped_pub_->HasConnections()) {
-      gz_geometry_msgs::Vector3dStamped position_stamped_msg;
-      position_stamped_msg.mutable_header()->CopyFrom(odometry_msg.header());
-      position_stamped_msg.mutable_position()->CopyFrom(
-          odometry_msg.pose().pose().position());
+    // if (position_stamped_pub_->HasConnections()) {
+    //   gz_geometry_msgs::Vector3dStamped position_stamped_msg;
+    //   position_stamped_msg.mutable_header()->CopyFrom(odometry_msg.header());
+    //   position_stamped_msg.mutable_position()->CopyFrom(
+    //       odometry_msg.pose().pose().position());
 
-      position_stamped_pub_->Publish(position_stamped_msg);
-    }
+    //   position_stamped_pub_->Publish(position_stamped_msg);
+    // }
 
-    if (transform_stamped_pub_->HasConnections()) {
-      gz_geometry_msgs::TransformStamped transform_stamped_msg;
+    // if (transform_stamped_pub_->HasConnections()) {
+    //   gz_geometry_msgs::TransformStamped transform_stamped_msg;
 
-      transform_stamped_msg.mutable_header()->CopyFrom(odometry_msg.header());
-      transform_stamped_msg.mutable_transform()->mutable_translation()->set_x(
-          p->x());
-      transform_stamped_msg.mutable_transform()->mutable_translation()->set_y(
-          p->y());
-      transform_stamped_msg.mutable_transform()->mutable_translation()->set_z(
-          p->z());
-      transform_stamped_msg.mutable_transform()->mutable_rotation()->CopyFrom(
-          *q_W_L);
+    //   transform_stamped_msg.mutable_header()->CopyFrom(odometry_msg.header());
+    //   transform_stamped_msg.mutable_transform()->mutable_translation()->set_x(
+    //       p->x());
+    //   transform_stamped_msg.mutable_transform()->mutable_translation()->set_y(
+    //       p->y());
+    //   transform_stamped_msg.mutable_transform()->mutable_translation()->set_z(
+    //       p->z());
+    //   transform_stamped_msg.mutable_transform()->mutable_rotation()->CopyFrom(
+    //       *q_W_L);
 
-      transform_stamped_pub_->Publish(transform_stamped_msg);
-    }
+    //   transform_stamped_pub_->Publish(transform_stamped_msg);
+    // }
 
     if (odometry_pub_->HasConnections()) {
       // DEBUG
@@ -486,26 +486,26 @@ void GazeboOdometryPlugin::OnUpdate(const common::UpdateInfo& _info) {
     //========= BROADCAST TRANSFORM MSG ============//
     //==============================================//
 
-    gz_geometry_msgs::TransformStampedWithFrameIds
-        transform_stamped_with_frame_ids_msg;
-    transform_stamped_with_frame_ids_msg.mutable_header()->CopyFrom(
-        odometry_msg.header());
-    transform_stamped_with_frame_ids_msg.mutable_transform()
-        ->mutable_translation()
-        ->set_x(p->x());
-    transform_stamped_with_frame_ids_msg.mutable_transform()
-        ->mutable_translation()
-        ->set_y(p->y());
-    transform_stamped_with_frame_ids_msg.mutable_transform()
-        ->mutable_translation()
-        ->set_z(p->z());
-    transform_stamped_with_frame_ids_msg.mutable_transform()
-        ->mutable_rotation()
-        ->CopyFrom(*q_W_L);
-    transform_stamped_with_frame_ids_msg.set_parent_frame_id(parent_frame_id_);
-    transform_stamped_with_frame_ids_msg.set_child_frame_id(child_frame_id_);
+    // gz_geometry_msgs::TransformStampedWithFrameIds
+    //     transform_stamped_with_frame_ids_msg;
+    // transform_stamped_with_frame_ids_msg.mutable_header()->CopyFrom(
+    //     odometry_msg.header());
+    // transform_stamped_with_frame_ids_msg.mutable_transform()
+    //     ->mutable_translation()
+    //     ->set_x(p->x());
+    // transform_stamped_with_frame_ids_msg.mutable_transform()
+    //     ->mutable_translation()
+    //     ->set_y(p->y());
+    // transform_stamped_with_frame_ids_msg.mutable_transform()
+    //     ->mutable_translation()
+    //     ->set_z(p->z());
+    // transform_stamped_with_frame_ids_msg.mutable_transform()
+    //     ->mutable_rotation()
+    //     ->CopyFrom(*q_W_L);
+    // transform_stamped_with_frame_ids_msg.set_parent_frame_id(parent_frame_id_);
+    // transform_stamped_with_frame_ids_msg.set_child_frame_id(child_frame_id_);
 
-    broadcast_transform_pub_->Publish(transform_stamped_with_frame_ids_msg);
+    // broadcast_transform_pub_->Publish(transform_stamped_with_frame_ids_msg);
 
   }  // if (gazebo_sequence_ == odometry_queue_.front().first) {
 
@@ -524,51 +524,51 @@ void GazeboOdometryPlugin::CreatePubsAndSubs() {
   // =============== POSE MSG SETUP ============= //
   // ============================================ //
 
-  pose_pub_ = node_handle_->Advertise<gazebo::msgs::Pose>(
-      "~/" + namespace_ + "/" + pose_pub_topic_, 1);
+//   pose_pub_ = node_handle_->Advertise<gazebo::msgs::Pose>(
+//       "~/" + namespace_ + "/" + pose_pub_topic_, 1);
 
-  connect_gazebo_to_ros_topic_msg.set_gazebo_topic("~/" + namespace_ + "/" +
-                                                   pose_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_ros_topic(namespace_ + "/" +
-                                                pose_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_msgtype(
-      gz_std_msgs::ConnectGazeboToRosTopic::POSE);
-  connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
-                                           true);
+//   connect_gazebo_to_ros_topic_msg.set_gazebo_topic("~/" + namespace_ + "/" +
+//                                                    pose_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_ros_topic(namespace_ + "/" +
+//                                                 pose_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_msgtype(
+//       gz_std_msgs::ConnectGazeboToRosTopic::POSE);
+//   connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
+//                                            true);
 
   // ============================================ //
   // == POSE WITH COVARIANCE STAMPED MSG SETUP == //
   // ============================================ //
 
-  pose_with_covariance_stamped_pub_ =
-      node_handle_->Advertise<gz_geometry_msgs::PoseWithCovarianceStamped>(
-          "~/" + namespace_ + "/" + pose_with_covariance_stamped_pub_topic_, 1);
+//   pose_with_covariance_stamped_pub_ =
+//       node_handle_->Advertise<gz_geometry_msgs::PoseWithCovarianceStamped>(
+//           "~/" + namespace_ + "/" + pose_with_covariance_stamped_pub_topic_, 1);
 
-  connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
-      "~/" + namespace_ + "/" + pose_with_covariance_stamped_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_ros_topic(
-      namespace_ + "/" + pose_with_covariance_stamped_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_msgtype(
-      gz_std_msgs::ConnectGazeboToRosTopic::POSE_WITH_COVARIANCE_STAMPED);
-  connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
-                                           true);
+//   connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
+//       "~/" + namespace_ + "/" + pose_with_covariance_stamped_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_ros_topic(
+//       namespace_ + "/" + pose_with_covariance_stamped_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_msgtype(
+//       gz_std_msgs::ConnectGazeboToRosTopic::POSE_WITH_COVARIANCE_STAMPED);
+//   connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
+//                                            true);
 
   // ============================================ //
   // ========= POSITION STAMPED MSG SETUP ======= //
   // ============================================ //
 
-  position_stamped_pub_ =
-      node_handle_->Advertise<gz_geometry_msgs::Vector3dStamped>(
-          "~/" + namespace_ + "/" + position_stamped_pub_topic_, 1);
+//   position_stamped_pub_ =
+//       node_handle_->Advertise<gz_geometry_msgs::Vector3dStamped>(
+//           "~/" + namespace_ + "/" + position_stamped_pub_topic_, 1);
 
-  connect_gazebo_to_ros_topic_msg.set_gazebo_topic("~/" + namespace_ + "/" +
-                                                   position_stamped_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_ros_topic(namespace_ + "/" +
-                                                position_stamped_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_msgtype(
-      gz_std_msgs::ConnectGazeboToRosTopic::VECTOR_3D_STAMPED);
-  connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
-                                           true);
+//   connect_gazebo_to_ros_topic_msg.set_gazebo_topic("~/" + namespace_ + "/" +
+//                                                    position_stamped_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_ros_topic(namespace_ + "/" +
+//                                                 position_stamped_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_msgtype(
+//       gz_std_msgs::ConnectGazeboToRosTopic::VECTOR_3D_STAMPED);
+//   connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
+//                                            true);
 
   // ============================================ //
   // ============= ODOMETRY MSG SETUP =========== //
@@ -590,26 +590,26 @@ void GazeboOdometryPlugin::CreatePubsAndSubs() {
   // ======== TRANSFORM STAMPED MSG SETUP ======= //
   // ============================================ //
 
-  transform_stamped_pub_ =
-      node_handle_->Advertise<gz_geometry_msgs::TransformStamped>(
-          "~/" + namespace_ + "/" + transform_stamped_pub_topic_, 1);
+//   transform_stamped_pub_ =
+//       node_handle_->Advertise<gz_geometry_msgs::TransformStamped>(
+//           "~/" + namespace_ + "/" + transform_stamped_pub_topic_, 1);
 
-  connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
-      "~/" + namespace_ + "/" + transform_stamped_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_ros_topic(namespace_ + "/" +
-                                                transform_stamped_pub_topic_);
-  connect_gazebo_to_ros_topic_msg.set_msgtype(
-      gz_std_msgs::ConnectGazeboToRosTopic::TRANSFORM_STAMPED);
-  connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
-                                           true);
+//   connect_gazebo_to_ros_topic_msg.set_gazebo_topic(
+//       "~/" + namespace_ + "/" + transform_stamped_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_ros_topic(namespace_ + "/" +
+//                                                 transform_stamped_pub_topic_);
+//   connect_gazebo_to_ros_topic_msg.set_msgtype(
+//       gz_std_msgs::ConnectGazeboToRosTopic::TRANSFORM_STAMPED);
+//   connect_gazebo_to_ros_topic_pub->Publish(connect_gazebo_to_ros_topic_msg,
+//                                            true);
 
   // ============================================ //
   // ===== "BROADCAST TRANSFORM" MSG SETUP =====  //
   // ============================================ //
 
-  broadcast_transform_pub_ =
-      node_handle_->Advertise<gz_geometry_msgs::TransformStampedWithFrameIds>(
-          "~/" + kBroadcastTransformSubtopic, 1);
+//   broadcast_transform_pub_ =
+//       node_handle_->Advertise<gz_geometry_msgs::TransformStampedWithFrameIds>(
+//           "~/" + kBroadcastTransformSubtopic, 1);
 }
 
 GZ_REGISTER_MODEL_PLUGIN(GazeboOdometryPlugin);
