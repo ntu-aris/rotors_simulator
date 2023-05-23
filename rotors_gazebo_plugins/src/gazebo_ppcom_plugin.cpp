@@ -119,6 +119,12 @@ namespace gazebo
         else
             gzerr << "[gazebo_ppcom_plugin] Please specify a ppcomId.\n";
 
+        std::string fstring_;
+        if (_sdf->HasElement("interestPcd"))
+            fstring_ = _sdf->GetElement("interestPcd")->Get<string>();
+        else
+            gzerr << "[gazebo_caric_plugin] Please specify input interest points.\n";
+            
         // Get the ppcom topic where data is published to
         getSdfParam<string>(_sdf, "ppcomTopic", ppcom_topic_, "ppcom");
 
@@ -129,6 +135,8 @@ namespace gazebo
         // Open the config file and read the links
         std::ifstream ppcom_config_file(ppcom_config_.c_str());
         
+        readPCloud(fstring_);
+
         // Read the declared nodes
         ppcom_nodes_.clear();
         string line;
@@ -391,7 +399,32 @@ namespace gazebo
                     topo_msg.range.push_back(distMat(i, j));
             
             ppcom_nodes_[ppcom_slf_idx_].topo_pub.publish(topo_msg);
+
+            
         }
+    }
+
+    void GazeboPPComPlugin::readPCloud(std::string filename)
+    {
+        pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZINormal>);
+        cloud_ = cloud;
+        if (pcl::io::loadPCDFile<pcl::PointXYZINormal>(filename, *cloud_) == -1) // load point cloud file
+        {
+            PCL_ERROR("Could not read the file");
+            return;
+        }
+        std::cout << "Loaded" << cloud_->width * cloud_->height
+                  << "data points with the following fields: "
+                  << std::endl;
+
+        // for(size_t i = 0; i < cloud_->points.size(); ++i)
+        //     std::cout << "    " << cloud_->points[i].x
+        //               << " "    << cloud_->points[i].y
+        //               << " "    << cloud_->points[i].z
+        //               << " "    << cloud_->points[i].normal_x
+        //               << " "    << cloud_->points[i].normal_y
+        //               << " "    << cloud_->points[i].normal_z << std::endl;
+        KtfreeInterests_.setInputCloud(cloud_);
     }
 
     bool GazeboPPComPlugin::CheckLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray)

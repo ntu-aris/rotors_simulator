@@ -45,6 +45,11 @@
 
 #include "utility.h"
 
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+#include <pcl/search/kdtree.h>
+#include <pcl_conversions/pcl_conversions.h>
+
 using namespace std;
 
 namespace gazebo {
@@ -100,6 +105,7 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   void OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx);
   bool CheckLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
+  void readPCloud(std::string filename);
 
   string namespace_;
   string ppcom_topic_;
@@ -150,6 +156,8 @@ class GazeboPPComPlugin : public ModelPlugin {
   // normal_distribution<double> standard_normal_distribution_;
 
   common::Time last_time_;
+  pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_;
+  pcl::search::KdTree<pcl::PointXYZINormal> KtfreeInterests_;
 };
 
 }  // namespace gazebo

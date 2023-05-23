@@ -858,7 +858,7 @@
     <!-- Macro to add a PPCom sensor. -->
     <xacro:macro name="ppcom_plugin_macro"
         params="namespace parent_link mass
-                ppcom_suffix ppcom_id ppcom_config ppcom_topic ppcom_hz
+                ppcom_suffix ppcom_id ppcom_config ppcom_topic ppcom_hz interest_config
                 *inertia *origin">
         <!-- IMU link -->
         <link name="${namespace}/ppcom${ppcom_suffix}_link">
