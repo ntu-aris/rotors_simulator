@@ -196,6 +196,8 @@ namespace gazebo
 
             node.topo_pub
                 = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
+            node.camera_pyramid_pub = ros_node_handle_->advertise<visualization_msgs::Marker>(
+                                                    "/" + node.name + "/visualize", 1);
 
             // Create the storage of nodes to each object
             node.odom_msg_received = false;
@@ -203,7 +205,9 @@ namespace gazebo
             // Create rayshape object
             node.ray = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
                         (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+            node.Cam_rel_Uav = Vector3d(0.2, 0.0, -0.5);
         }
+        cloud_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
 
         // Listen to the update event. This event is broadcast every simulation iteration.
         last_time_ = world_->SimTime();
@@ -237,6 +241,7 @@ namespace gazebo
 
         common::Time current_time = world_->SimTime();
         double dt = (current_time - last_time_).Double();
+        double dt2 = (current_time - last_time_cam_).Double();
 
         if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
             return;
@@ -399,9 +404,114 @@ namespace gazebo
                     topo_msg.range.push_back(distMat(i, j));
             
             ppcom_nodes_[ppcom_slf_idx_].topo_pub.publish(topo_msg);
-
-            
         }
+        if (dt2 > 1.0/cam_evaluate_hz_)
+        {
+            last_time_cam_ = current_time;
+            for(int i = 0; i < Nnodes_; i ++)
+            {
+                PPComNode &node_i = ppcom_nodes_[i];
+
+                if (!node_i.odom_msg_received)
+                    continue;
+
+                // Create the start points
+                myTf<double> tf_uav(node_i.odom_msg);
+                // Vector3d pi(node_i.odom_msg.pose.pose.position.x,
+                //             node_i.odom_msg.pose.pose.position.y,
+                //             node_i.odom_msg.pose.pose.position.z);
+                Vector3d p_cam_world = tf_uav*node_i.Cam_rel_Uav;
+                pcl::PointXYZINormal pos_cam;
+                pos_cam.x = p_cam_world(0);
+                pos_cam.y = p_cam_world(1);
+                pos_cam.z = p_cam_world(2);
+                node_i.cam_rpy = Vector3d(0.0, 0.0, tf_uav.yaw());
+                myTf<double> tf_cam(Util::YPR2Rot(node_i.cam_rpy), p_cam_world);            
+
+                std::vector<int> k_idx;
+                std::vector<float> k_distances;
+                KtfreeInterests_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);        
+
+                for (int j = 0; j < k_idx.size(); j++) //
+                {
+                    pcl::PointXYZINormal &kpoint = cloud_->points[k_idx[j]];
+                    Vector3d InPoint_world(kpoint.x, kpoint.y, kpoint.z);
+                    Vector3d InPoint_cam = tf_cam.inverse()*InPoint_world;
+                    if (InPoint_cam(0)<=0.0) continue;
+                    double horiz_angle = atan(InPoint_cam(1)/InPoint_cam(0))/M_PI*180.0;
+                    double vert_angle = atan(InPoint_cam(2)/InPoint_cam(0))/M_PI*180.0;
+                    if (horiz_angle>node_i.fov_h/2 || horiz_angle<-node_i.fov_h/2 ||
+                        vert_angle >node_i.fov_v/2 || vert_angle <-node_i.fov_v/2)
+                        continue;
+                    if (CheckLOS(p_cam_world, InPoint_world, node_i.ray))
+                    {
+                        cloud_->points[k_idx[j]].intensity = 1.0;
+                        // ROS_INFO("Setting points to high intensity!!");
+                    }
+                }
+        
+                std::vector<Vector3d> point_list_in_world;
+                point_list_in_world.push_back(p_cam_world);
+                for (double k : {1.0, -1.0})
+                {
+                    for (double l : {1.0, -1.0})
+                    {
+                        Vector3d point_in_cam(node_i.visible_radius,
+                                                k * tan(node_i.fov_h * 0.008726646) * node_i.visible_radius,
+                                                l * tan(node_i.fov_v * 0.008726646) * node_i.visible_radius);
+                        Vector3d point_in_world = tf_cam * point_in_cam;
+                        point_list_in_world.push_back(point_in_world);
+                    }
+                    point_list_in_world.push_back(p_cam_world);
+                }
+                point_list_in_world.push_back(point_list_in_world[1]);
+                point_list_in_world.push_back(point_list_in_world[4]);
+                point_list_in_world.push_back(point_list_in_world[5]);
+                point_list_in_world.push_back(point_list_in_world[2]);
+                visualization_msgs::Marker m;
+                m.type = visualization_msgs::Marker::LINE_STRIP;
+                m.action = visualization_msgs::Marker::DELETEALL;
+                m.id = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
+                m.ns = "view_agent_1";
+
+                m.color.a = 1.0; // Don't forget to set the alpha!
+                m.color.r = 0.0;
+                m.color.g = 1.0;
+                m.color.b = 0.0;
+
+                m.scale.x = 0.15;
+                m.scale.y = 0.0001;
+                m.scale.z = 0.0001;
+                m.header.stamp = ros::Time::now();
+                m.header.frame_id = "world";
+                // viewPub_list_[agent_id].publish(m); //DELETE last line first
+                node_i.camera_pyramid_pub.publish(m);
+                m.action = visualization_msgs::Marker::ADD;
+                // pose is actually not used in the marker, but if not RVIZ complains about the quaternion
+                m.pose.position.x = 0.0;
+                m.pose.position.y = 0.0;
+                m.pose.position.z = 0.0;
+                m.pose.orientation.x = 0.0;
+                m.pose.orientation.y = 0.0;
+                m.pose.orientation.z = 0.0;
+                m.pose.orientation.w = 1.0;
+
+                for (auto point : point_list_in_world)
+                {
+                    geometry_msgs::Point point1;
+                    point1.x = point(0);
+                    point1.y = point(1);
+                    point1.z = point(2);
+                    m.points.push_back(point1);
+                }
+                // viewPub_list_[agent_id].publish(m);
+                node_i.camera_pyramid_pub.publish(m);
+            }            
+            sensor_msgs::PointCloud2 msg1;
+            pcl::toROSMsg(*cloud_, msg1);
+            msg1.header.frame_id = "world";
+            cloud_pub_.publish(msg1);
+        }        
     }
 
     void GazeboPPComPlugin::readPCloud(std::string filename)
@@ -472,6 +582,28 @@ namespace gazebo
                     return true;
             }
         }
+        return los;
+    }
+
+    bool GazeboPPComPlugin::CheckLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray)
+    {
+
+        // Ray tracing from the slf node to each of the nbr node
+        double rtDist;      // Raytracing distance
+        double ppDist = 0;  // Peer to peer distance
+        string entity_name; // Name of intersected object
+        ignition::math::Vector3d start_point;
+        ignition::math::Vector3d end_point;
+        bool los = false;
+        start_point = ignition::math::Vector3d(pi(0), pi(1), pi(2));
+        end_point = ignition::math::Vector3d(pj(0), pj(1), pj(2));
+
+        ray->SetPoints(start_point, end_point);
+        ray->GetIntersection(rtDist, entity_name);
+
+        ppDist = (pi - pj).norm();
+        if (rtDist >= ppDist - 0.1)
+            return true;
         return los;
     }
 

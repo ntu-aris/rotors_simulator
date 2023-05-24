@@ -49,6 +49,7 @@
 #include <pcl/point_types.h>
 #include <pcl/search/kdtree.h>
 #include <pcl_conversions/pcl_conversions.h>
+#include "utility_tm.h"
 
 using namespace std;
 
@@ -78,11 +79,19 @@ struct PPComNode
 
     // Subsribed odometry subscriber
     ros::Publisher topo_pub;
+    ros::Publisher camera_pyramid_pub;
 
     // Saved odometry message
     nav_msgs::Odometry odom_msg;
 
     bool odom_msg_received = false;
+
+    Eigen::Vector3d Cam_rel_Uav;
+    Eigen::Vector3d cam_rpy;
+
+    double visible_radius = 5.0;
+    double fov_h = 80.0;
+    double fov_v = 60.0;
 };
 
 class GazeboPPComPlugin : public ModelPlugin {
@@ -105,6 +114,7 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   void OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx);
   bool CheckLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
+  bool CheckLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray);  
   void readPCloud(std::string filename);
 
   string namespace_;
@@ -155,9 +165,13 @@ class GazeboPPComPlugin : public ModelPlugin {
   // default_random_engine random_generator_;
   // normal_distribution<double> standard_normal_distribution_;
 
-  common::Time last_time_;
+  /// \brief  Update time for the topology
+  double cam_evaluate_hz_ = 10;  
+
+  common::Time last_time_, last_time_cam_;
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_;
   pcl::search::KdTree<pcl::PointXYZINormal> KtfreeInterests_;
+  ros::Publisher cloud_pub_;
 };
 
 }  // namespace gazebo

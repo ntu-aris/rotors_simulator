@@ -898,6 +898,7 @@
 
                 <!-- (double): Update period of the ppcom -->
                 <ppcomHz>${ppcom_hz}</ppcomHz>
+                <interestPcd>${interest_config}</interestPcd>
 
             </plugin>
         </gazebo>
