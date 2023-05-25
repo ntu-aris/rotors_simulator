@@ -1,7 +1,7 @@
-# Name      Role      AntOffset
-gcs,        manager,  0.1
-firefly1,   peer,     0.1
-firefly2,   peer,     0.1
-firefly3,   peer,     0.1
-firefly4,   peer,     0.1
-firefly5,   peer,     0.1
+# Name      Role      AntOffset     HorizFOV    VertFOV     CamPositionX    CamPositionY    CamPositionZ    ExposureTime
+gcs,        manager,  0.1,          80,          60,        0.2,            0.0,            -0.3,           0.1
+firefly1,   peer,     0.1,          80,          60,        0.2,            0.0,            -0.3,           0.1
+firefly2,   peer,     0.1,          80,          60,        0.2,            0.0,            -0.3,           0.1
+firefly3,   peer,     0.1,          80,          60,        0.2,            0.0,            -0.3,           0.1
+firefly4,   peer,     0.1,          80,          60,        0.2,            0.0,            -0.3,           0.1
+firefly5,   peer,     0.1,          80,          60,        0.2,            0.0,            -0.3,           0.1

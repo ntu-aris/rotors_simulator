@@ -64,7 +64,18 @@ namespace gazebo
         for(auto &c : this->odom_msg.pose.covariance)
             c = -1;
     }
-        
+
+    PPComNode::PPComNode(const string &name_, const string &role_, const double &offset_,
+                         const double &hfov, const double &vfov, const double &cam_x,
+                         const double &cam_y, const double &cam_z)
+        : name(name_), role(role_), offset(offset_), fov_h(hfov), fov_v(vfov)
+    {
+        // Set cov diagonal this to -1 to indicate no reception yet
+        for(auto &c : this->odom_msg.pose.covariance)
+            c = -1;
+        Cam_rel_Uav = Vector3d(cam_x, cam_y, cam_z);
+    }
+
     PPComNode::~PPComNode() {}
 
     // Plugin definition
@@ -154,7 +165,9 @@ namespace gazebo
 
             // Decode the line and construct the node
             vector<string> parts = Util::split(line, ",");
-            ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2])));
+            ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2]), stod(parts[3]), 
+                                            stod(parts[4]), stod(parts[5]), stod(parts[6]),
+                                            stod(parts[7])));
         }
 
         // Assert that ppcom_id_ is found in the network
@@ -212,10 +225,8 @@ namespace gazebo
             node.ray_camera = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
                                 (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
 
-            // Create another rayshape object for camera check
-
-            node.Cam_rel_Uav = Vector3d(0.2, 0.0, -0.5);
         }
+        
         cloud_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
 
         // Listen to the update event. This event is broadcast every simulation iteration.
@@ -418,7 +429,8 @@ namespace gazebo
             for(int i = 0; i < Nnodes_; i ++)
             {
                 PPComNode &node_i = ppcom_nodes_[i];
-
+                if (node_i.name == "gcs") continue;
+                
                 if (!node_i.odom_msg_received)
                     continue;
 

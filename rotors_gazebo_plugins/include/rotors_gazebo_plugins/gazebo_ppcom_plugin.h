@@ -60,7 +60,9 @@ struct PPComNode
 {
     PPComNode();
     PPComNode(const string &name_, const string &role_, const double &offset_);
-   
+    PPComNode(const string &name_, const string &role_, const double &offset_,
+              const double &hfov, const double &vfov, const double &cam_x,
+              const double &cam_y, const double &cam_z);   
    ~PPComNode();
     
     // Name of the node
