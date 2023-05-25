@@ -193,24 +193,33 @@ namespace gazebo
             node.odom_sub
                 = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + node.name + "/ground_truth/odometry", 1,
                                                                   boost::bind(&GazeboPPComPlugin::OdomCallback, this, _1, node_idx));
-
+            // Publisher for the topology
             node.topo_pub
                 = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
+
+            // Publisher for camera pyramid visuals    
             node.camera_pyramid_pub = ros_node_handle_->advertise<visualization_msgs::Marker>(
                                                     "/" + node.name + "/visualize", 1);
 
             // Create the storage of nodes to each object
             node.odom_msg_received = false;
 
-            // Create rayshape object
-            node.ray = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                        (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+            // Create a rayshape object for communication link
+            node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+
+            // Create rayshape object for camera field of view check
+            node.ray_camera = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
+
+            // Create another rayshape object for camera check
+
             node.Cam_rel_Uav = Vector3d(0.2, 0.0, -0.5);
         }
         cloud_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
 
         // Listen to the update event. This event is broadcast every simulation iteration.
-        last_time_ = world_->SimTime();
+        last_time_topo_ = world_->SimTime();
         this->updateConnection_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboPPComPlugin::OnUpdate, this, _1));
     }
 
@@ -234,22 +243,14 @@ namespace gazebo
         //         ypr.x(), ypr.y(), ypr.z());
     }
 
-    void GazeboPPComPlugin::OnUpdate(const common::UpdateInfo &_info)
+    void GazeboPPComPlugin::UpdateTopo()
     {
-        if (kPrintOnUpdates)
-            gzdbg << __FUNCTION__ << "() called." << endl;
-
-        common::Time current_time = world_->SimTime();
-        double dt = (current_time - last_time_).Double();
-        double dt2 = (current_time - last_time_cam_).Double();
-
-        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
-            return;
-
+        gazebo::common::Time current_time = world_->SimTime();
+        double dt_topo = (current_time - last_time_topo_).Double();
         // Update the ray casting every 0.1s
-        if (dt > 1.0/ppcom_hz_)
+        if (dt_topo > 1.0/ppcom_hz_)
         {
-            last_time_ = current_time;
+            last_time_topo_ = current_time;
 
             Eigen::MatrixXd distMat = -1*Eigen::MatrixXd::Ones(Nnodes_, Nnodes_);
             vector<vector<bool>> los_check(Nnodes_, vector<bool>(Nnodes_, false));
@@ -265,7 +266,7 @@ namespace gazebo
                 Vector3d pi(node_i.odom_msg.pose.pose.position.x,
                             node_i.odom_msg.pose.pose.position.y,
                             node_i.odom_msg.pose.pose.position.z);
-                
+
                 for (int j = i+1; j < Nnodes_; j++)
                 {
                     PPComNode &node_j = ppcom_nodes_[j];
@@ -280,8 +281,8 @@ namespace gazebo
                                 node_j.odom_msg.pose.pose.position.y,
                                 node_j.odom_msg.pose.pose.position.z);
 
-                    los_check[i][j] = los_check[j][i] = CheckLOS(pi, node_i.offset, pj, node_j.offset, node_i.ray);
-                    
+                    los_check[i][j] = los_check[j][i] = CheckTopoLOS(pi, node_i.offset, pj, node_j.offset, node_i.ray_topo);
+
                     // Assign the distance if there is line of sight
                     if (los_check[i][j])
                     {
@@ -405,7 +406,13 @@ namespace gazebo
             
             ppcom_nodes_[ppcom_slf_idx_].topo_pub.publish(topo_msg);
         }
-        if (dt2 > 1.0/cam_evaluate_hz_)
+    }
+
+    void GazeboPPComPlugin::UpdateInterestPoint()
+    {
+        gazebo::common::Time current_time = world_->SimTime();
+        double dt_inspection = (current_time - last_time_cam_).Double();
+        if (dt_inspection > 1.0/cam_evaluate_hz_)
         {
             last_time_cam_ = current_time;
             for(int i = 0; i < Nnodes_; i ++)
@@ -430,20 +437,25 @@ namespace gazebo
 
                 std::vector<int> k_idx;
                 std::vector<float> k_distances;
-                KtfreeInterests_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);        
+                kdTreeInterestPts_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);        
 
                 for (int j = 0; j < k_idx.size(); j++) //
                 {
                     pcl::PointXYZINormal &kpoint = cloud_->points[k_idx[j]];
                     Vector3d InPoint_world(kpoint.x, kpoint.y, kpoint.z);
                     Vector3d InPoint_cam = tf_cam.inverse()*InPoint_world;
-                    if (InPoint_cam(0)<=0.0) continue;
-                    double horiz_angle = atan(InPoint_cam(1)/InPoint_cam(0))/M_PI*180.0;
-                    double vert_angle = atan(InPoint_cam(2)/InPoint_cam(0))/M_PI*180.0;
-                    if (horiz_angle>node_i.fov_h/2 || horiz_angle<-node_i.fov_h/2 ||
-                        vert_angle >node_i.fov_v/2 || vert_angle <-node_i.fov_v/2)
+                    
+                    if (InPoint_cam(0) <= 0.0)
                         continue;
-                    if (CheckLOS(p_cam_world, InPoint_world, node_i.ray))
+                        
+                    double horz_angle = atan(InPoint_cam(1)/InPoint_cam(0))/M_PI*180.0;
+                    double vert_angle = atan(InPoint_cam(2)/InPoint_cam(0))/M_PI*180.0;
+
+                    if (horz_angle > node_i.fov_h/2 || horz_angle < -node_i.fov_h/2 ||
+                        vert_angle > node_i.fov_v/2 || vert_angle < -node_i.fov_v/2)
+                        continue;
+
+                    if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_camera))
                     {
                         cloud_->points[k_idx[j]].intensity = 1.0;
                         // ROS_INFO("Setting points to high intensity!!");
@@ -457,8 +469,8 @@ namespace gazebo
                     for (double l : {1.0, -1.0})
                     {
                         Vector3d point_in_cam(node_i.visible_radius,
-                                                k * tan(node_i.fov_h * 0.008726646) * node_i.visible_radius,
-                                                l * tan(node_i.fov_v * 0.008726646) * node_i.visible_radius);
+                                              k * tan(node_i.fov_h * 0.008726646) * node_i.visible_radius,
+                                              l * tan(node_i.fov_v * 0.008726646) * node_i.visible_radius);
                         Vector3d point_in_world = tf_cam * point_in_cam;
                         point_list_in_world.push_back(point_in_world);
                     }
@@ -468,11 +480,12 @@ namespace gazebo
                 point_list_in_world.push_back(point_list_in_world[4]);
                 point_list_in_world.push_back(point_list_in_world[5]);
                 point_list_in_world.push_back(point_list_in_world[2]);
+
                 visualization_msgs::Marker m;
-                m.type = visualization_msgs::Marker::LINE_STRIP;
+                m.type   = visualization_msgs::Marker::LINE_STRIP;
                 m.action = visualization_msgs::Marker::DELETEALL;
-                m.id = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
-                m.ns = "view_agent_1";
+                m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
+                m.ns     = "view_agent_1";
 
                 m.color.a = 1.0; // Don't forget to set the alpha!
                 m.color.r = 0.0;
@@ -486,6 +499,7 @@ namespace gazebo
                 m.header.frame_id = "world";
                 // viewPub_list_[agent_id].publish(m); //DELETE last line first
                 node_i.camera_pyramid_pub.publish(m);
+
                 m.action = visualization_msgs::Marker::ADD;
                 // pose is actually not used in the marker, but if not RVIZ complains about the quaternion
                 m.pose.position.x = 0.0;
@@ -506,12 +520,43 @@ namespace gazebo
                 }
                 // viewPub_list_[agent_id].publish(m);
                 node_i.camera_pyramid_pub.publish(m);
-            }            
-            sensor_msgs::PointCloud2 msg1;
-            pcl::toROSMsg(*cloud_, msg1);
-            msg1.header.frame_id = "world";
-            cloud_pub_.publish(msg1);
-        }        
+            }
+
+            Util::publishCloud(cloud_pub_, *cloud_, ros::Time::now(), "world");
+        }
+    }
+
+    void GazeboPPComPlugin::OnUpdate(const common::UpdateInfo &_info)
+    {
+
+        if (kPrintOnUpdates)
+            gzdbg << __FUNCTION__ << "() called." << endl;
+
+        // common::Time current_time = world_->SimTime();
+
+        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
+            return;
+        
+        TicToc tt_update;
+
+        TicToc tt_topo;
+        
+        // Update the topology
+        UpdateTopo();
+        
+        tt_topo.Toc();
+
+        TicToc tt_ip;
+        
+        // Update the interest point
+        UpdateInterestPoint();
+        
+        tt_ip.Toc();
+
+
+        // printf("Topo Time: %.3f. Ip Time: %.3f. Total: %.3f\n",
+        //         tt_topo.GetLastStop(), tt_ip.GetLastStop(), tt_update.Toc());
+
     }
 
     void GazeboPPComPlugin::readPCloud(std::string filename)
@@ -534,10 +579,10 @@ namespace gazebo
         //               << " "    << cloud_->points[i].normal_x
         //               << " "    << cloud_->points[i].normal_y
         //               << " "    << cloud_->points[i].normal_z << std::endl;
-        KtfreeInterests_.setInputCloud(cloud_);
+        kdTreeInterestPts_.setInputCloud(cloud_);
     }
 
-    bool GazeboPPComPlugin::CheckLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray)
+    bool GazeboPPComPlugin::CheckTopoLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray)
     {
         vector<Vector3d> Pi;
         Pi.push_back(pi + Vector3d(bi, 0, 0));
@@ -575,20 +620,21 @@ namespace gazebo
                 end_point = ignition::math::Vector3d(pb.x(), pb.y(), pb.z());
 
                 ray->SetPoints(start_point, end_point);
+
                 ray->GetIntersection(rtDist, entity_name);
 
                 ppDist = (pa - pb).norm();
                 if (rtDist >= ppDist - 0.1)
                     return true;
+
             }
         }
         return los;
     }
 
-    bool GazeboPPComPlugin::CheckLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray)
+    bool GazeboPPComPlugin::CheckInterestPointLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray)
     {
-
-        // Ray tracing from the slf node to each of the nbr node
+        // Ray tracing from the optical origin to the interestpoint
         double rtDist;      // Raytracing distance
         double ppDist = 0;  // Peer to peer distance
         string entity_name; // Name of intersected object
@@ -602,7 +648,7 @@ namespace gazebo
         ray->GetIntersection(rtDist, entity_name);
 
         ppDist = (pi - pj).norm();
-        if (rtDist >= ppDist - 0.1)
+        if (rtDist >= ppDist - 0.025)
             return true;
         return los;
     }

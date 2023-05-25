@@ -205,7 +205,7 @@ namespace gazebo
         //               << " "    << cloud_->points[i].normal_x
         //               << " "    << cloud_->points[i].normal_y
         //               << " "    << cloud_->points[i].normal_z << std::endl;
-        KtfreeInterests_.setInputCloud(cloud_);
+        kdTreeInterestPts_.setInputCloud(cloud_);
     }
 
     void GazeboCaricPlugin::OdomCallback(const nav_msgs::OdometryConstPtr &msg)

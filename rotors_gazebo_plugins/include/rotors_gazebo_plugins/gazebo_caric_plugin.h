@@ -88,7 +88,7 @@ class GazeboCaricPlugin : public ModelPlugin {
   bool CheckLOS(const tf::Vector3 &pi, const tf::Vector3 &pj);
   pcl::search::KdTree<pcl::PointXYZINormal> getktree()
   {
-    return KtfreeInterests_;
+    return kdTreeInterestPts_;
   }
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr getcloud()
   {
@@ -211,7 +211,7 @@ class GazeboCaricPlugin : public ModelPlugin {
 
   common::Time last_time_;
   gazebo::physics::RayShapePtr ray_;
-  pcl::search::KdTree<pcl::PointXYZINormal> KtfreeInterests_;
+  pcl::search::KdTree<pcl::PointXYZINormal> kdTreeInterestPts_;
   std::vector<Listener> idListener_;  
   int number_of_robots_ = 3;
   std::string fstring_ = "/home/to/Desktop/file.pcd";

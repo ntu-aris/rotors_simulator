@@ -72,7 +72,10 @@ struct PPComNode
     double offset = 0.0;
 
     // ray tracing object
-    gazebo::physics::RayShapePtr ray;
+    gazebo::physics::RayShapePtr ray_topo;
+
+    // ray tracing object
+    gazebo::physics::RayShapePtr ray_camera;
 
     // Subsribed odometry subscriber
     ros::Subscriber odom_sub;
@@ -113,8 +116,10 @@ class GazeboPPComPlugin : public ModelPlugin {
  private:
 
   void OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx);
-  bool CheckLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
-  bool CheckLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray);  
+  void UpdateTopo();
+  void UpdateInterestPoint();
+  bool CheckTopoLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
+  bool CheckInterestPointLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray);  
   void readPCloud(std::string filename);
 
   string namespace_;
@@ -166,11 +171,11 @@ class GazeboPPComPlugin : public ModelPlugin {
   // normal_distribution<double> standard_normal_distribution_;
 
   /// \brief  Update time for the topology
-  double cam_evaluate_hz_ = 10;  
+  double cam_evaluate_hz_ = 10;
 
-  common::Time last_time_, last_time_cam_;
+  common::Time last_time_topo_, last_time_cam_;
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_;
-  pcl::search::KdTree<pcl::PointXYZINormal> KtfreeInterests_;
+  pcl::search::KdTree<pcl::PointXYZINormal> kdTreeInterestPts_;
   ros::Publisher cloud_pub_;
 };
 
