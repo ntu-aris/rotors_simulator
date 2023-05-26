@@ -434,6 +434,25 @@ namespace gazebo
                 if (!node_i.odom_msg_received)
                     continue;
 
+                visualization_msgs::Marker m;
+                m.type   = visualization_msgs::Marker::LINE_STRIP;
+                m.action = visualization_msgs::Marker::DELETEALL;
+                m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
+                m.ns     = "view_agent_1";
+
+                m.color.a = 1.0; // Don't forget to set the alpha!
+                m.color.r = 0.0;
+                m.color.g = 1.0;
+                m.color.b = 0.0;
+
+                m.scale.x = 0.15;
+                m.scale.y = 0.0001;
+                m.scale.z = 0.0001;
+                m.header.stamp = ros::Time::now();
+                m.header.frame_id = "world";
+                // viewPub_list_[agent_id].publish(m); //DELETE last line first
+                node_i.camera_pyramid_pub.publish(m);
+
                 // Create the start points
                 myTf<double> tf_uav(node_i.odom_msg);
                 // Vector3d pi(node_i.odom_msg.pose.pose.position.x,
@@ -451,6 +470,19 @@ namespace gazebo
                 std::vector<float> k_distances;
                 kdTreeInterestPts_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);        
 
+                //odometry message gives velocity in body frame
+                Vector3d v_uav_world = tf_uav.rot*Vector3d(node_i.odom_msg.twist.twist.linear.x,
+                                                            node_i.odom_msg.twist.twist.linear.y,
+                                                            node_i.odom_msg.twist.twist.linear.z);
+
+                //angvel uav is expressed in body frame
+                Vector3d angv_uav(node_i.odom_msg.twist.twist.angular.x,
+                                  node_i.odom_msg.twist.twist.angular.y,
+                                  node_i.odom_msg.twist.twist.angular.z);
+
+                Vector3d v_cam_world = v_uav_world + tf_uav.rot*Util::skewSymmetric(angv_uav)*node_i.Cam_rel_Uav;
+                
+                
                 for (int j = 0; j < k_idx.size(); j++) //
                 {
                     pcl::PointXYZINormal &kpoint = cloud_->points[k_idx[j]];
@@ -467,9 +499,52 @@ namespace gazebo
                         vert_angle > node_i.fov_v/2 || vert_angle < -node_i.fov_v/2)
                         continue;
 
+                    double visualized = false;
                     if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_camera))
                     {
-                        cloud_->points[k_idx[j]].intensity = 1.0;
+                        node_i.cam_rpy_rate = Vector3d(node_i.odom_msg.twist.twist.angular.x, node_i.odom_msg.twist.twist.angular.y, 
+                        node_i.odom_msg.twist.twist.angular.z);
+                        Vector3d v_point_in_cam = - Util::skewSymmetric(node_i.cam_rpy_rate) * InPoint_cam -
+                                                    tf_cam.rot.inverse()*v_cam_world;
+                        //horizontal camera pixels
+                        double pixel_move_v = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(1) *node_i.exposure/node_i.pixel_size;
+                        //vertical camera pixels
+                        double pixel_move_u = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(2) *node_i.exposure/node_i.pixel_size;
+
+                        double score = 1.0- min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
+                        if (score > cloud_->points[k_idx[j]].intensity)
+                            cloud_->points[k_idx[j]].intensity = score;
+
+                        // if (visualized) continue;
+                        // visualized = true;
+                        // visualization_msgs::Marker m;
+                        // m.type   = visualization_msgs::Marker::ARROW;
+                        // m.action = visualization_msgs::Marker::ADD;
+                        // m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
+                        // m.ns     = "view_agent_1";
+
+                        // m.color.a = 1.0; // Don't forget to set the alpha!
+                        // m.color.r = 0.0;
+                        // m.color.g = 1.0;
+                        // m.color.b = 0.0;
+
+                        // m.scale.x = 0.15;
+                        // m.scale.y = 0.25;
+                        // m.scale.z = 0.4;
+                        // m.header.stamp = ros::Time::now();
+                        // m.header.frame_id = "world";
+                        // geometry_msgs::Point point1;
+                        // point1.x = InPoint_world(0);
+                        // point1.y = InPoint_world(1);
+                        // point1.z = InPoint_world(2);
+                        // m.points.push_back(point1);
+                        // Vector3d v_point_world = tf_cam.rot* v_point_in_cam*1.0;
+                        // point1.x = InPoint_world(0) + v_point_world(0);
+                        // point1.y = InPoint_world(1) + v_point_world(1);
+                        // point1.z = InPoint_world(2) + v_point_world(2);
+                        // m.points.push_back(point1);
+                        // node_i.camera_pyramid_pub.publish(m);                     
+
                         // ROS_INFO("Setting points to high intensity!!");
                     }
                 }
@@ -493,24 +568,24 @@ namespace gazebo
                 point_list_in_world.push_back(point_list_in_world[5]);
                 point_list_in_world.push_back(point_list_in_world[2]);
 
-                visualization_msgs::Marker m;
-                m.type   = visualization_msgs::Marker::LINE_STRIP;
-                m.action = visualization_msgs::Marker::DELETEALL;
-                m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
-                m.ns     = "view_agent_1";
+                // visualization_msgs::Marker m;
+                // m.type   = visualization_msgs::Marker::LINE_STRIP;
+                // m.action = visualization_msgs::Marker::DELETEALL;
+                // m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
+                // m.ns     = "view_agent_1";
 
-                m.color.a = 1.0; // Don't forget to set the alpha!
-                m.color.r = 0.0;
-                m.color.g = 1.0;
-                m.color.b = 0.0;
+                // m.color.a = 1.0; // Don't forget to set the alpha!
+                // m.color.r = 0.0;
+                // m.color.g = 1.0;
+                // m.color.b = 0.0;
 
-                m.scale.x = 0.15;
-                m.scale.y = 0.0001;
-                m.scale.z = 0.0001;
-                m.header.stamp = ros::Time::now();
-                m.header.frame_id = "world";
-                // viewPub_list_[agent_id].publish(m); //DELETE last line first
-                node_i.camera_pyramid_pub.publish(m);
+                // m.scale.x = 0.15;
+                // m.scale.y = 0.0001;
+                // m.scale.z = 0.0001;
+                // m.header.stamp = ros::Time::now();
+                // m.header.frame_id = "world";
+                // // viewPub_list_[agent_id].publish(m); //DELETE last line first
+                // node_i.camera_pyramid_pub.publish(m);
 
                 m.action = visualization_msgs::Marker::ADD;
                 // pose is actually not used in the marker, but if not RVIZ complains about the quaternion
@@ -531,7 +606,7 @@ namespace gazebo
                     m.points.push_back(point1);
                 }
                 // viewPub_list_[agent_id].publish(m);
-                node_i.camera_pyramid_pub.publish(m);
+                // node_i.camera_pyramid_pub.publish(m);
             }
 
             Util::publishCloud(cloud_pub_, *cloud_, ros::Time::now(), "world");
