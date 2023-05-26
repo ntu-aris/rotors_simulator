@@ -93,10 +93,14 @@ struct PPComNode
 
     Eigen::Vector3d Cam_rel_Uav;
     Eigen::Vector3d cam_rpy;
+    Eigen::Vector3d cam_rpy_rate;
 
-    double visible_radius = 5.0;
-    double fov_h = 80.0;
+    double visible_radius = 10.0;
+    double fov_h = 90.0;
     double fov_v = 60.0;
+    double focal_length = 0.016; //in meter
+    double exposure = 0.001; //in s
+    double pixel_size = 4.35e-6; //in m
 };
 
 class GazeboPPComPlugin : public ModelPlugin {
