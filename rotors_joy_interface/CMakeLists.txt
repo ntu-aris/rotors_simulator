@@ -7,12 +7,19 @@ find_package(catkin REQUIRED COMPONENTS
   mav_msgs
   sensor_msgs
   trajectory_msgs
+  nav_msgs
+  tf
+  pcl_conversions
+  pcl_ros  
+  trajectory_msgs
 )
-include_directories(include ${catkin_INCLUDE_DIRS})
+# find_package(Eigen REQUIRED)
+include_directories(include ${catkin_INCLUDE_DIRS} ${Eigen_INCLUDE_DIRS})
+
 
 catkin_package(
   DEPENDS
-  INCLUDE_DIRS include
+  INCLUDE_DIRS include ${Eigen_INCLUDE_DIRS}
   CATKIN_DEPENDS roscpp geometry_msgs mav_msgs sensor_msgs trajectory_msgs
   LIBRARIES
 )
@@ -24,6 +31,16 @@ add_dependencies(rotors_joy_interface ${catkin_EXPORTED_TARGETS})
 target_link_libraries(rotors_joy_interface ${catkin_LIBRARIES})
 
 install(TARGETS rotors_joy_interface
+  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
+add_executable(rotors_joy_control_interface src/joy_position.cpp)
+add_dependencies(rotors_joy_control_interface ${catkin_EXPORTED_TARGETS})
+target_link_libraries(rotors_joy_control_interface ${catkin_LIBRARIES})
+
+install(TARGETS rotors_joy_control_interface
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
