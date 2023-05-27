@@ -450,7 +450,6 @@ namespace gazebo
                 m.scale.z = 0.0001;
                 m.header.stamp = ros::Time::now();
                 m.header.frame_id = "world";
-                // viewPub_list_[agent_id].publish(m); //DELETE last line first
                 node_i.camera_pyramid_pub.publish(m);
 
                 // Create the start points
@@ -502,16 +501,48 @@ namespace gazebo
                     double visualized = false;
                     if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_camera))
                     {
-                        node_i.cam_rpy_rate = Vector3d(node_i.odom_msg.twist.twist.angular.x, node_i.odom_msg.twist.twist.angular.y, 
-                        node_i.odom_msg.twist.twist.angular.z);
+                        node_i.cam_rpy_rate = Vector3d(node_i.odom_msg.twist.twist.angular.x, 
+                                                        node_i.odom_msg.twist.twist.angular.y, 
+                                                        node_i.odom_msg.twist.twist.angular.z);
                         Vector3d v_point_in_cam = - Util::skewSymmetric(node_i.cam_rpy_rate) * InPoint_cam -
                                                     tf_cam.rot.inverse()*v_cam_world;
                         //horizontal camera pixels
-                        double pixel_move_v = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(1) *node_i.exposure/node_i.pixel_size;
+                        double pixel_move_v = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(1) *
+                                                node_i.exposure/node_i.pixel_size;
                         //vertical camera pixels
-                        double pixel_move_u = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(2) *node_i.exposure/node_i.pixel_size;
+                        double pixel_move_u = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(2) *
+                                                node_i.exposure/node_i.pixel_size;
 
-                        double score = 1.0- min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
+                        double score1 = 1.0- min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
+
+                        // compute resolution requirement mm per pixel
+                        Vector3d Normal_world(kpoint.normal_x, kpoint.normal_y, kpoint.normal_z);
+                        Vector3d Normal_cam = (tf_cam.rot.inverse()*Normal_world).normalized();
+                        // Normal_cam = Vector3d(-1.0, 0.0, 0.0); //for testing only
+                        Vector3d x_disp(-Normal_cam(2), 0.0, Normal_cam(0)); //the gradient projected on the x-z plane
+                        Vector3d inPoint_xplus = InPoint_cam + 0.0005*x_disp;
+                        Vector3d inPoint_xminus = InPoint_cam - 0.0005*x_disp;
+                        double v_plus = inPoint_xplus(2)*node_i.focal_length/inPoint_xplus(0);
+                        double v_minus = inPoint_xminus(2)*node_i.focal_length/inPoint_xminus(0);
+                        double mm_per_pixel_v = node_i.pixel_size/fabs(v_plus-v_minus);
+
+                        Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); //the gradient projected on the x-y plane
+                        Vector3d inPoint_yplus = InPoint_cam + 0.0005*y_disp;
+                        Vector3d inPoint_yminus = InPoint_cam - 0.0005*y_disp;
+                        double u_plus = inPoint_yplus(1)*node_i.focal_length/inPoint_yplus(0);
+                        double u_minus = inPoint_yminus(1)*node_i.focal_length/inPoint_yminus(0);
+                        double mm_per_pixel_u = node_i.pixel_size/fabs(u_plus-u_minus);
+
+                        double score2 = max(0.0, 1.0 - max(max(mm_per_pixel_v, mm_per_pixel_u)-6.0, 0.0)/10.0);
+                        double score = score1 * score2;
+                        if (inPoint_yplus(0) < 0 ||inPoint_yminus(0) < 0 ||
+                            inPoint_xplus(0) < 0 ||inPoint_xminus(0) < 0)
+                        {
+                            ROS_INFO("NOT RIGHT! X smaller than zero!!"); 
+                            continue;                           
+                        }
+
+                        // std::cout<<"mm_per pixel u is "<<mm_per_pixel_u<<"mm_per pixel v is "<<mm_per_pixel_v<<std::endl;
                         if (score > cloud_->points[k_idx[j]].intensity)
                             cloud_->points[k_idx[j]].intensity = score;
 
@@ -584,7 +615,6 @@ namespace gazebo
                 // m.scale.z = 0.0001;
                 // m.header.stamp = ros::Time::now();
                 // m.header.frame_id = "world";
-                // // viewPub_list_[agent_id].publish(m); //DELETE last line first
                 // node_i.camera_pyramid_pub.publish(m);
 
                 m.action = visualization_msgs::Marker::ADD;
@@ -605,8 +635,7 @@ namespace gazebo
                     point1.z = point(2);
                     m.points.push_back(point1);
                 }
-                // viewPub_list_[agent_id].publish(m);
-                // node_i.camera_pyramid_pub.publish(m);
+                node_i.camera_pyramid_pub.publish(m);
             }
 
             Util::publishCloud(cloud_pub_, *cloud_, ros::Time::now(), "world");
