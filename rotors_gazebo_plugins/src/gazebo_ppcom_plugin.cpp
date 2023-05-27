@@ -740,7 +740,7 @@ namespace gazebo
                 ray->GetIntersection(rtDist, entity_name);
 
                 ppDist = (pa - pb).norm();
-                if (rtDist >= ppDist - 0.1)
+                if (entity_name == "" || (rtDist >= ppDist - 0.1))
                     return true;
 
             }
@@ -764,7 +764,7 @@ namespace gazebo
         ray->GetIntersection(rtDist, entity_name);
 
         ppDist = (pi - pj).norm();
-        if (rtDist >= ppDist - 0.025)
+        if (fabs(rtDist - ppDist) <= 0.025)
             return true;
         return los;
     }
