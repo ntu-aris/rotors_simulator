@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(rotors_joy_interface)
 
+set(CMAKE_BUILD_TYPE "Release")
+set(CMAKE_CXX_FLAGS "-std=c++17 -Wfatal-errors")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -g")
+
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   geometry_msgs
@@ -9,8 +13,8 @@ find_package(catkin REQUIRED COMPONENTS
   trajectory_msgs
   nav_msgs
   tf
-  pcl_conversions
-  pcl_ros  
+  # pcl_conversions
+  # pcl_ros  
   trajectory_msgs
 )
 # find_package(Eigen REQUIRED)

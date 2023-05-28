@@ -30,6 +30,7 @@
 #include <nav_msgs/Odometry.h>
 #include "rotors_joy_interface/utility.h"
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
+#include "Eigen/Dense"
 
 struct Axes {
   int roll;

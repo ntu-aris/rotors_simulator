@@ -64,22 +64,6 @@
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
 
-// #include <opencv2/opencv.hpp>
-
-#include <pcl/point_cloud.h>
-#include <pcl/point_types.h>
-// #include <pcl/search/impl/search.hpp>
-// #include <pcl/range_image/range_image.h>
-#include <pcl/kdtree/kdtree_flann.h>
-// #include <pcl/common/common.h>
-// #include <pcl/common/transforms.h>
-#include <pcl/registration/icp.h>
-#include <pcl/io/pcd_io.h>
-// #include <pcl/filters/filter.h>
-// #include <pcl/filters/voxel_grid.h>
-// #include <pcl/filters/crop_box.h>
-#include <pcl_conversions/pcl_conversions.h>
-
 #include <tf/LinearMath/Quaternion.h>
 #include <tf/transform_listener.h>
 #include <tf/transform_datatypes.h>
@@ -87,14 +71,7 @@
 
 #include "glob.h"
 
-// #include <ufo/math/vector3.h>
-// #include <ufo/map/point_cloud.h>
-// #include <ufo/map/surfel_map.h>
-
-// #include <sophus/se3.hpp>
-
-// Ceres
-// #include <ceres/ceres.h>
+#include "Eigen/Dense"
 
 using namespace std;
 using namespace Eigen;
@@ -111,155 +88,6 @@ using namespace Eigen;
 
 #define yolo() printf("Hello line: %s:%d. \n", __FILE__ , __LINE__);
 #define yolos(...) printf("Hello line: %s:%d. ", __FILE__, __LINE__); printf(__VA_ARGS__); std::cout << std::endl;
-#define MAX_THREADS std::thread::hardware_concurrency()
-
-/* #region  Custom point type definition --------------------------------------------------------*/
-
-struct PointOuster
-{
-    PCL_ADD_POINT4D;
-    float intensity;
-    uint32_t t;
-    uint16_t reflectivity;
-    uint8_t  ring;
-    // uint16_t ambient; // Available in NTU VIRAL and multicampus datasets
-    uint32_t range;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-} EIGEN_ALIGN16;
-POINT_CLOUD_REGISTER_POINT_STRUCT(PointOuster,
-                                 (float, x, x) (float, y, y) (float, z, z)
-                                 (float, intensity, intensity)
-                                 (uint32_t, t, t)
-                                 (uint16_t, reflectivity, reflectivity)
-                                 (uint8_t,  ring, ring)
-                                //  (uint16_t, ambient, ambient)
-                                 (uint32_t, range, range))
-
-struct PointVelodyne
-{
-    PCL_ADD_POINT4D
-    PCL_ADD_INTENSITY;
-    uint16_t ring;
-    float time;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-} EIGEN_ALIGN16;
-POINT_CLOUD_REGISTER_POINT_STRUCT (PointVelodyne,
-                                  (float, x, x) (float, y, y) (float, z, z)
-                                  (float, intensity, intensity)
-                                  (uint16_t, ring, ring)
-                                  (float, time, time))
-
-struct PointHesai
-{
-    PCL_ADD_POINT4D
-    float intensity;
-    double timestamp;
-    uint16_t ring;                   ///< laser ring number
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-} EIGEN_ALIGN16;
-POINT_CLOUD_REGISTER_POINT_STRUCT(PointHesai,
-                                 (float, x, x) (float, y, y) (float, z, z)
-                                 (float, intensity, intensity)
-                                 (double, timestamp, timestamp)
-                                 (uint16_t, ring, ring))
-
-struct PointTQXYZI 
-{
-    PCL_ADD_POINT4D
-    PCL_ADD_INTENSITY;              // preferred way of adding a XYZ+padding
-    double t;
-    float  qx;
-    float  qy;
-    float  qz;
-    float  qw;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW // make sure our new allocators are aligned
-} EIGEN_ALIGN16;                    // enforce SSE padding for correct memory alignment
-POINT_CLOUD_REGISTER_POINT_STRUCT(PointTQXYZI,
-                                 (float,  x, x) (float,  y, y) (float,  z, z)
-                                 (float,  intensity, intensity)
-                                 (double, t,  t)
-                                 (float,  qx, qx)
-                                 (float,  qy, qy)
-                                 (float,  qz, qz)
-                                 (float,  qw, qw))
-struct PointOdom
-{
-    PCL_ADD_POINT4D
-    PCL_ADD_INTENSITY;              // preferred way of adding a XYZ+padding
-    double t;
-    float  qx;
-    float  qy;
-    float  qz;
-    float  qw;
-    float  vx;
-    float  vy;
-    float  vz;
-    float  ax;
-    float  ay;
-    float  az;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW // make sure our new allocators are aligned
-} EIGEN_ALIGN16;                    // enforce SSE padding for correct memory alignment
-POINT_CLOUD_REGISTER_POINT_STRUCT(PointOdom,
-                                 (float,  x, x) (float,  y, y) (float,  z, z)
-                                 (float,  intensity, intensity)
-                                 (double, t,  t)
-                                 (float,  qx, qx)
-                                 (float,  qy, qy)
-                                 (float,  qz, qz)
-                                 (float,  qw, qw)
-                                 (float,  vx, vx)
-                                 (float,  vy, vy)
-                                 (float,  vz, vz)
-                                 (float,  ax, aw)
-                                 (float,  ay, ax)
-                                 (float,  az, ay))
-
-struct PointXYZIT
-{
-    PCL_ADD_POINT4D;
-    PCL_ADD_INTENSITY;
-    double t;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-} EIGEN_ALIGN16;
-POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZIT,
-                                 (float, x, x) (float, y, y) (float, z, z)
-                                 (float, intensity, intensity) (double, t, t))
-
-typedef pcl::PointXYZ PointXYZ;
-typedef pcl::PointXYZI PointXYZI;
-typedef PointTQXYZI PointPose;
-
-typedef pcl::PointCloud<PointXYZ> CloudXYZ;
-typedef pcl::PointCloud<PointXYZI> CloudXYZI;
-typedef pcl::PointCloud<PointXYZIT> CloudXYZIT;
-typedef pcl::PointCloud<PointPose> CloudPose;
-typedef pcl::PointCloud<PointOdom> CloudOdom;
-typedef pcl::PointCloud<PointOuster> CloudOuster;
-typedef pcl::PointCloud<PointVelodyne> CloudVelodyne;
-
-typedef pcl::PointCloud<PointXYZ>::Ptr CloudXYZPtr;
-typedef pcl::PointCloud<PointXYZI>::Ptr PointCloudPtr;
-typedef pcl::PointCloud<PointXYZI>::Ptr CloudXYZIPtr;
-typedef pcl::PointCloud<PointXYZIT>::Ptr CloudXYZITPtr;
-typedef pcl::PointCloud<PointPose>::Ptr CloudPosePtr;
-typedef pcl::PointCloud<PointOdom>::Ptr CloudOdomPtr;
-typedef pcl::PointCloud<PointOuster>::Ptr CloudOusterPtr;
-typedef pcl::PointCloud<PointVelodyne>::Ptr CloudVelodynePtr;
-
-typedef pcl::KdTreeFLANN<PointXYZI> KdFLANN;
-typedef pcl::KdTreeFLANN<PointXYZI>::Ptr KdFLANNPtr;
-
-/* #endregion  Custom point type definition -----------------------------------------------------*/
-
-
-/* #region  Image pointer shortened name -------*/
-
-typedef sensor_msgs::Image::Ptr RosImgPtr;
-typedef sensor_msgs::Image::ConstPtr RosImgConstPtr;
-// typedef map<int, vector<pair<int, Eigen::Matrix<double, 7, 1>>>> VisFeatureFrame;
-// typedef pair<double, VisFeatureFrame> StampedVisFeatureFrame;
-
-/* #endregion Image pointer shortened name -----*/
 
 // Shortened typedef matching character length of Vector3d and Matrix3d
 typedef Eigen::Quaterniond Quaternd;
@@ -352,12 +180,6 @@ struct myTf
         this->pos = tfMat.block(0, 3, 3, 1).template cast<T>();
     }
 
-    myTf(PointPose point)
-    {
-        this->rot = Quaternion<T>(point.qw, point.qx, point.qy, point.qz);
-        this->pos << point.x, point.y, point.z;
-    }
-
     myTf(nav_msgs::Odometry odom)
     {
         this->rot = Quaternion<T>(odom.pose.pose.orientation.w,
@@ -388,13 +210,6 @@ struct myTf
         return myTf<T>(this->rot.slerp(s, tf_final.rot), (1-s)*this->pos + s*tf_final.pos);
     }
 
-    // template <typename Tin>
-    // myTf(Sophus::SE3<Tin> se3)
-    // {
-    //     this->rot = se3.so3().unit_quaternion();
-    //     this->pos = se3.translation();
-    // }
-
     Eigen::Transform<T, 3, Eigen::TransformTraits::Affine> transform() const
     {
         Eigen::Transform<T, 3, Eigen::TransformTraits::Affine> transform;
@@ -410,66 +225,6 @@ struct myTf
         M.block(0, 3, 3, 1) = pos;
         return M;
     }
-
-    PointXYZI Point3D() const
-    {
-        PointXYZI p;
-
-        p.x = (float)pos.x();
-        p.y = (float)pos.y();
-        p.z = (float)pos.z();
-
-        p.intensity = -1;
-
-        return p;
-    }
-    
-    PointPose Pose6D() const
-    {
-        PointPose p;
-
-        p.t = -1;
-
-        p.x = (float)pos.x();
-        p.y = (float)pos.y();
-        p.z = (float)pos.z();
-
-        p.qx = (float)rot.x();
-        p.qy = (float)rot.y();
-        p.qz = (float)rot.z();
-        p.qw = (float)rot.w();
-
-        p.intensity = -1;
-
-        return p;
-    }
-
-    PointPose Pose6D(double time) const
-    {
-        PointPose p;
-
-        p.t = time;
-        
-        p.x = (float)pos.x();
-        p.y = (float)pos.y();
-        p.z = (float)pos.z();
-
-        p.qx = (float)rot.x();
-        p.qy = (float)rot.y();
-        p.qz = (float)rot.z();
-        p.qw = (float)rot.w();
-
-        p.intensity = -1;
-
-        return p;
-    }
-
-    // template <typename Tout = double>
-    // Sophus::SE3<Tout> getSE3() const
-    // {
-    //     return Sophus::SE3<Tout>(this->rot.template cast<Tout>(),
-    //                              this->pos.template cast<Tout>());
-    // }
 
     double roll() const
     {
@@ -523,49 +278,8 @@ struct myTf
 
 typedef myTf<> mytf;
 
-CloudXYZI toCloudXYZI(CloudXYZIT &inCloud)
-{
-    int cloudSize = inCloud.size();
-    CloudXYZI outCloud; outCloud.resize(cloudSize);
-    
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for(int i = 0; i < cloudSize; i++)
-    {
-        outCloud.points[i].x = inCloud.points[i].x;
-        outCloud.points[i].y = inCloud.points[i].y;
-        outCloud.points[i].z = inCloud.points[i].z;
-        outCloud.points[i].intensity = inCloud.points[i].intensity;
-    }
-
-    return outCloud;
-}
-
 namespace Util
 {
-    // void MergeVector(vector<int> &vecA, vector<int> &vecB)
-    // {
-    //     std::sort(vecA.begin(), vecA.end());
-    //     std::sort(vecB.begin(), vecB.end());
-    //     vector<int> vecTemp = vector<int>(vecA.size() + vecB.size());
-    //     vector<int>::iterator it = std::set_union(vecA.begin(), vecA.end(), vecB.begin(), vecB.end(), vecTemp.begin());
-    //     vecTemp.resize(it - vecTemp.begin());
-    //     vecA = vecTemp;
-    // }
-
-    template <typename PointType>
-    sensor_msgs::PointCloud2 publishCloud(ros::Publisher &thisPub,
-                                          pcl::PointCloud<PointType> &thisCloud,
-                                          ros::Time thisStamp, std::string thisFrame)
-    {
-        sensor_msgs::PointCloud2 tempCloud;
-        pcl::toROSMsg(thisCloud, tempCloud);
-        tempCloud.header.stamp = thisStamp;
-        tempCloud.header.frame_id = thisFrame;
-        // if (thisPub.getNumSubscribers() != 0)
-            thisPub.publish(tempCloud);
-        return tempCloud;
-    }
-
     float wrapTo360(float angle)
     {
         angle = fmod(angle, 360);
@@ -835,86 +549,6 @@ namespace Util
         R0 = Util::YPR2Rot(Eigen::Vector3d(-yaw, 0, 0)) * R0;
         // R0 = Util::ypr2R(Eigen::Vector3d{-90, 0, 0}) * R0;
         return R0;
-
-        // // Get z axis, which alines with -g (z_in_G=0,0,1)
-        // Eigen::Vector3d z_axis = g / g.norm();
-
-        // // Create an x_axis
-        // Eigen::Vector3d e_1(1, 0, 0);
-
-        // // Make x_axis perpendicular to z
-        // Eigen::Vector3d x_axis = e_1 - z_axis * z_axis.transpose() * e_1;
-        // x_axis = x_axis / x_axis.norm();
-
-        // // Get z from the cross product of these two
-        // Eigen::Matrix<double, 3, 1> y_axis = Util::skewSymmetric(z_axis) * x_axis;
-
-        // // From these axes get rotation
-        // Eigen::Matrix<double, 3, 3> Ro;
-        // Ro.block(0, 0, 3, 1) = x_axis;
-        // Ro.block(0, 1, 3, 1) = y_axis;
-        // Ro.block(0, 2, 3, 1) = z_axis;
-
-        // // Eigen::Quaterniond q0(Ro);
-        // // q0.normalize();
-        // return Ro;
-    }
-
-    Vector3d transform_pointVec(const mytf &tf, const PointXYZI &pi)
-    {
-        Vector3d bodyPoint = tf.rot * Vector3d(pi.x, pi.y, pi.z) + tf.pos;
-        return bodyPoint;
-    }
-
-    template <typename PointT>
-    PointT transform_point(const mytf &tf, const PointT &pi)
-    {
-        Vector3d pos = tf.rot * Vector3d(pi.x, pi.y, pi.z) + tf.pos;
-        
-        PointT po = pi;
-        po.x = pos.x();
-        po.y = pos.y();
-        po.z = pos.z();
-
-        return po;
-    }
-
-    PointPose transform_point(const mytf &tf, const PointPose &pi)
-    {
-        Vector3d pos = tf.rot * Vector3d(pi.x, pi.y, pi.z) + tf.pos;
-        Quaternd rot = tf.rot * Quaternd(pi.qw, pi.qx, pi.qy, pi.qz);
-        
-        PointPose po;
-        po.x  = pos.x();
-        po.y  = pos.y();
-        po.z  = pos.z();
-        po.qx = rot.x();
-        po.qy = rot.y();
-        po.qz = rot.z();
-        po.qw = rot.w();
-        po.t  = pi.t;
-        po.intensity = pi.intensity;
-
-        return po;
-    }
-
-    PointXYZI Extract3DFrom6D(const PointPose &p6D)
-    {
-        PointXYZI p3D;
-
-        p3D.x = p6D.x;
-        p3D.y = p6D.y;
-        p3D.z = p6D.z;
-        p3D.intensity = p6D.intensity;
-
-        return p3D;
-    }
-
-    template <typename PointT>
-    bool PointIsValid(const PointT &p)
-    {
-        return (std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(p.z)
-                && !std::isnan(p.x) && !std::isnan(p.y) && !std::isnan(p.z));
     }
 
     template <size_t N>
@@ -947,119 +581,5 @@ namespace Util
     };
 
 }; // namespace Util
-
-#define _CRT_NO_VA_START_VALIDATION
-std::string myprintf(const std::string& format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    size_t len = std::vsnprintf(NULL, 0, format.c_str(), args);
-    va_end(args);
-    std::vector<char> vec(len + 1);
-    va_start(args, format);
-    std::vsnprintf(&vec[0], len + 1, format.c_str(), args);
-    va_end(args);
-    
-    return string(vec.begin(), vec.end() - 1);
-}
-
-// bool file_exist(const std::string& name)
-// {
-//   struct stat buffer;   
-//   return (stat (name.c_str(), &buffer) == 0); 
-// }
-
-// inline vector<string> check_files(const string &pattern)
-// {
-//     glob_t glob_result;
-//     glob(pattern.c_str(), GLOB_TILDE, NULL, &glob_result);
-//     vector<string> files;
-//     for (unsigned int i = 0; i < glob_result.gl_pathc; ++i)
-//     {
-//         files.push_back(string(glob_result.gl_pathv[i]));
-//     }
-//     globfree(&glob_result);
-//     return files;
-// }
-
-// // Load deliminated file to matrix with unknown size
-// template <typename Scalar=double, int RowSize=Dynamic, int ColSize=Dynamic>
-// Matrix<Scalar, RowSize, ColSize> load_dlm(const std::string &path, string dlm, int r_start = 0, int col_start = 0)
-// {
-//     std::ifstream indata;
-//     indata.open(path);
-//     std::string line;
-//     std::vector<double> values;
-//     int row_idx = -1;
-//     int rows = 0;
-//     while (std::getline(indata, line))
-//     {
-//         row_idx++;
-//         if (row_idx < r_start)
-//             continue; 
-
-//         std::stringstream lineStream(line);
-//         std::string cell;
-//         int col_idx = -1;
-//         while (std::getline(lineStream, cell, dlm[0]))
-//         {
-//             if(cell == dlm || cell.size() == 0)
-//                 continue;
-                
-//             col_idx++;
-//             if (col_idx < col_start)
-//                 continue;
-
-//             values.push_back(std::stod(cell));
-//         }
-
-//         rows++;
-
-//     }
-
-//     return Map<const Matrix<Scalar, RowSize, ColSize, RowMajor>>(values.data(), rows, values.size() / rows);
-// }
-
-// string zeroPaddedString(int num, int max)
-// {
-//     int max_digit = 0;
-//     int num_digit = 0;
-
-//     while(true)
-//     {
-//         if (num == 0)
-//         {
-//             num_digit = 1;
-//             break;
-//         }
-        
-//         if (pow(10, num_digit) > num)
-//             break;
-//         else
-//             num_digit++;
-//     }
-
-//     while(true)
-//     {
-//         if (max == 0)
-//         {
-//             max_digit = 1;
-//             break;
-//         }
-        
-//         if (pow(10, max_digit) > max)
-//             break;
-//         else
-//             max_digit++;
-//     }
-
-//     int padded_zero = max_digit - num_digit;
-
-//     string num_str;
-//     for (int i = 0; i < padded_zero; i++)
-//         num_str += "0";
-
-//     return (num_str + std::to_string(num));
-// }
 
 #endif
