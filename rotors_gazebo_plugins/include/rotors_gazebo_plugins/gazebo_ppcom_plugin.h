@@ -74,10 +74,10 @@ struct PPComNode
     double offset = 0.0;
 
     // ray tracing object
-    gazebo::physics::RayShapePtr ray_topo;
+    // gazebo::physics::RayShapePtr ray_topo;
 
     // ray tracing object
-    gazebo::physics::RayShapePtr ray_camera;
+    // gazebo::physics::RayShapePtr ray_camera;
 
     // Subsribed odometry subscriber
     ros::Subscriber odom_sub;
@@ -117,13 +117,14 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   /// \brief  	This gets called by the world update start event.
   /// \details	Calculates IMU parameters and then publishes one IMU message.
-  void OnUpdate(const common::UpdateInfo&);
+  void OnUpdateCheckTopology(const common::UpdateInfo&);
+  void OnUpdateCheckInterestPoints(const common::UpdateInfo&);
 
  private:
 
   void OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx);
-  void UpdateTopo();
-  void UpdateInterestPoint();
+  void UpdateTopology();
+  void UpdateInterestPoints();
   bool CheckTopoLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
   bool CheckInterestPointLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray);  
   void readPCloud(std::string filename);
@@ -151,6 +152,12 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   /// \brief  Pointer to the engine.
   physics::PhysicsEnginePtr physics_;
+
+  /// \brief // ray tracing object
+  gazebo::physics::RayShapePtr ray_topo_;
+
+  /// \brief // ray tracing object
+  gazebo::physics::RayShapePtr ray_inpo_;
   
   /// \brief  Id of the ppcom node
   string ppcom_id_;
@@ -171,7 +178,8 @@ class GazeboPPComPlugin : public ModelPlugin {
   vector<PPComNode> ppcom_nodes_;
 
   // /// \brief  Pointer to the update event connection.
-  event::ConnectionPtr updateConnection_;
+  event::ConnectionPtr updateConnection_topology_;
+  event::ConnectionPtr updateConnection_interestpoints_;
 
   // default_random_engine random_generator_;
   // normal_distribution<double> standard_normal_distribution_;
@@ -179,7 +187,7 @@ class GazeboPPComPlugin : public ModelPlugin {
   /// \brief  Update time for the topology
   double cam_evaluate_hz_ = 10;
 
-  common::Time last_time_topo_, last_time_cam_;
+  common::Time last_time_topo_, last_time_inpo_;
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_;
   pcl::search::KdTree<pcl::PointXYZINormal> kdTreeInterestPts_;
   ros::Publisher cloud_pub_;

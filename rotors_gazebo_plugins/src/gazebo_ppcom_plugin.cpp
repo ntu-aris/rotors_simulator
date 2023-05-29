@@ -101,6 +101,14 @@ namespace gazebo
         // default params
         namespace_.clear();
 
+        // Create a rayshape object for communication links
+        ray_topo_ = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+                            (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+
+        // Create rayshape object for camera field of view check
+        ray_inpo_ = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+                            (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
+
         //==============================================//
         //========== READ IN PARAMS FROM SDF ===========//
         //==============================================//
@@ -217,13 +225,13 @@ namespace gazebo
             // Create the storage of nodes to each object
             node.odom_msg_received = false;
 
-            // Create a rayshape object for communication link
-            node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+            // // Create a rayshape object for communication link
+            // node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+            //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
 
-            // Create rayshape object for camera field of view check
-            node.ray_camera = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
+            // // Create rayshape object for camera field of view check
+            // node.ray_camera = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+            //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
 
         }
         
@@ -231,30 +239,18 @@ namespace gazebo
 
         // Listen to the update event. This event is broadcast every simulation iteration.
         last_time_topo_ = world_->SimTime();
-        this->updateConnection_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboPPComPlugin::OnUpdate, this, _1));
+        last_time_inpo_ = last_time_topo_;
+        this->updateConnection_topology_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboPPComPlugin::OnUpdateCheckTopology, this, _1));
+        this->updateConnection_interestpoints_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboPPComPlugin::OnUpdateCheckInterestPoints, this, _1));
     }
 
     void GazeboPPComPlugin::OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx)
     {
         ppcom_nodes_[node_idx].odom_msg = *msg;
         ppcom_nodes_[node_idx].odom_msg_received = true;
-        
-        // nav_msgs::Odometry &odom = odom_msgs[node_idx];
-
-        // Eigen::Vector3d ypr = Eigen::Quaterniond(odom.pose.pose.orientation.w,
-        //                                          odom.pose.pose.orientation.x,
-        //                                          odom.pose.pose.orientation.y,
-        //                                          odom.pose.pose.orientation.z).toRotationMatrix().eulerAngles(0, 1, 2);
-
-        // printf("Callback of %s. From node %s. XYZ: %6.3f, %6.3f, %6.3f. RPY: %6.3f, %6.3f, %6.3f.\n",
-        //         ppcom_id_.c_str(), ppcom_nodes_[node_idx].name.c_str(),
-        //         odom.pose.pose.position.x,
-        //         odom.pose.pose.position.y,
-        //         odom.pose.pose.position.z,
-        //         ypr.x(), ypr.y(), ypr.z());
     }
 
-    void GazeboPPComPlugin::UpdateTopo()
+    void GazeboPPComPlugin::UpdateTopology()
     {
         gazebo::common::Time current_time = world_->SimTime();
         double dt_topo = (current_time - last_time_topo_).Double();
@@ -292,7 +288,7 @@ namespace gazebo
                                 node_j.odom_msg.pose.pose.position.y,
                                 node_j.odom_msg.pose.pose.position.z);
 
-                    los_check[i][j] = los_check[j][i] = CheckTopoLOS(pi, node_i.offset, pj, node_j.offset, node_i.ray_topo);
+                    los_check[i][j] = los_check[j][i] = CheckTopoLOS(pi, node_i.offset, pj, node_j.offset, ray_topo_);
 
                     // Assign the distance if there is line of sight
                     if (los_check[i][j])
@@ -302,99 +298,6 @@ namespace gazebo
                     }
                 }
             }
-            
-            
-            /* #region Publish visualization of the topology --------------------------------------------------------*/
-
-            // typedef visualization_msgs::Marker RosVizMarker;
-            // typedef std_msgs::ColorRGBA RosVizColor;
-            // typedef ros::Publisher RosPub;
-
-            // struct VizAid
-            // {
-            //     bool           inited = false;
-            //     RosVizColor    color  = RosVizColor();
-            //     RosVizMarker   marker = RosVizMarker();
-            //     ros::Publisher rosPub = RosPub();
-            // };
-
-            // // Predefined colors
-            // static RosVizColor los_color;
-            // los_color.r = 0.0;
-            // los_color.g = 1.0;
-            // los_color.b = 0.5;
-            // los_color.a = 1.0;
-
-            // static RosVizColor nlos_color;
-            // nlos_color.r = 1.0;
-            // nlos_color.g = 0.65;
-            // nlos_color.b = 0.0;
-            // nlos_color.a = 1.0;
-
-            // // Create the los marker
-            // static vector<VizAid> vizAid(Nnodes_);
-            // VizAid &vizAidSelf = vizAid[ppcom_slf_idx_];
-            
-            // // Initialize the loop marker
-            // if (!vizAidSelf.inited)
-            // {
-            //     vizAidSelf.rosPub = ros_node_handle_->advertise<RosVizMarker>("/" + ppcom_id_ + "/los_marker", 1);
-
-            //     // Set up the loop marker
-            //     vizAidSelf.marker.header.frame_id = "world";
-            //     vizAidSelf.marker.ns       = "loop_marker";
-            //     vizAidSelf.marker.type     = visualization_msgs::Marker::LINE_LIST;
-            //     vizAidSelf.marker.action   = visualization_msgs::Marker::ADD;
-            //     vizAidSelf.marker.pose.orientation.w = 1.0;
-            //     vizAidSelf.marker.lifetime = ros::Duration(0);
-            //     vizAidSelf.marker.id       = 0;
-
-            //     vizAidSelf.marker.scale.x = 0.15;
-            //     vizAidSelf.marker.scale.y = 0.15;
-            //     vizAidSelf.marker.scale.z = 0.15;
-
-            //     vizAidSelf.marker.color.r = 0.0;
-            //     vizAidSelf.marker.color.g = 1.0;
-            //     vizAidSelf.marker.color.b = 1.0;
-            //     vizAidSelf.marker.color.a = 1.0;
-    
-            //     vizAidSelf.color = los_color;
-
-            //     vizAidSelf.inited = true;
-            // }
-
-            // vizAidSelf.marker.points.clear();
-            // vizAidSelf.marker.colors.clear();
-
-            // for(int i = 0; i < Nnodes_; i++)
-            // {
-            //     for (int j = i+1; j < Nnodes_; j++)
-            //     {
-            //         if(los_check[i][j])
-            //         {
-
-            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
-            //             vizAidSelf.marker.colors.push_back(los_color);
-
-            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
-            //             vizAidSelf.marker.colors.push_back(los_color);
-            //         }
-            //         else if(ppcom_nodes_[i].odom_msg_received && ppcom_nodes_[j].odom_msg_received)
-            //         {
-            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[i].odom_msg.pose.pose.position);
-            //             vizAidSelf.marker.colors.push_back(nlos_color);
-
-            //             vizAidSelf.marker.points.push_back(ppcom_nodes_[j].odom_msg.pose.pose.position);
-            //             vizAidSelf.marker.colors.push_back(nlos_color);
-            //         }
-                    
-            //     }
-            // }
-
-            // vizAidSelf.rosPub.publish(vizAidSelf.marker);
-
-            /* #endregion Publish visualization of the topology -----------------------------------------------------*/
-
 
             // Publish the information of the topology
             rotors_comm::PPComTopology topo_msg;
@@ -409,7 +312,7 @@ namespace gazebo
                 topo_msg.node_odom.push_back(node.odom_msg);
                 // printf("Node %s. OdomCov: %f\n", node.name.c_str(), node.odom_msg.pose.covariance[0]);
             }
-            
+
             topo_msg.range.clear();
             for(int i = 0; i < Nnodes_; i++)
                 for(int j = i+1; j < Nnodes_; j++)
@@ -419,13 +322,13 @@ namespace gazebo
         }
     }
 
-    void GazeboPPComPlugin::UpdateInterestPoint()
+    void GazeboPPComPlugin::UpdateInterestPoints()
     {
         gazebo::common::Time current_time = world_->SimTime();
-        double dt_inspection = (current_time - last_time_cam_).Double();
+        double dt_inspection = (current_time - last_time_inpo_).Double();
         if (dt_inspection > 1.0/cam_evaluate_hz_)
         {
-            last_time_cam_ = current_time;
+            last_time_inpo_ = current_time;
             for(int i = 0; i < Nnodes_; i ++)
             {
                 PPComNode &node_i = ppcom_nodes_[i];
@@ -471,8 +374,8 @@ namespace gazebo
 
                 //odometry message gives velocity in body frame
                 Vector3d v_uav_world = tf_uav.rot*Vector3d(node_i.odom_msg.twist.twist.linear.x,
-                                                            node_i.odom_msg.twist.twist.linear.y,
-                                                            node_i.odom_msg.twist.twist.linear.z);
+                                                           node_i.odom_msg.twist.twist.linear.y,
+                                                           node_i.odom_msg.twist.twist.linear.z);
 
                 //angvel uav is expressed in body frame
                 Vector3d angv_uav(node_i.odom_msg.twist.twist.angular.x,
@@ -499,11 +402,11 @@ namespace gazebo
                         continue;
 
                     double visualized = false;
-                    if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_camera))
+                    if (CheckInterestPointLOS(p_cam_world, InPoint_world, ray_inpo_))
                     {
                         node_i.cam_rpy_rate = Vector3d(node_i.odom_msg.twist.twist.angular.x, 
-                                                        node_i.odom_msg.twist.twist.angular.y, 
-                                                        node_i.odom_msg.twist.twist.angular.z);
+                                                       node_i.odom_msg.twist.twist.angular.y, 
+                                                       node_i.odom_msg.twist.twist.angular.z);
                         Vector3d v_point_in_cam = - Util::skewSymmetric(node_i.cam_rpy_rate) * InPoint_cam -
                                                     tf_cam.rot.inverse()*v_cam_world;
                         //horizontal camera pixels
@@ -642,9 +545,8 @@ namespace gazebo
         }
     }
 
-    void GazeboPPComPlugin::OnUpdate(const common::UpdateInfo &_info)
+    void GazeboPPComPlugin::OnUpdateCheckTopology(const common::UpdateInfo &_info)
     {
-
         if (kPrintOnUpdates)
             gzdbg << __FUNCTION__ << "() called." << endl;
 
@@ -653,26 +555,34 @@ namespace gazebo
         if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
             return;
         
-        TicToc tt_update;
-
         TicToc tt_topo;
         
         // Update the topology
-        UpdateTopo();
-        
+        UpdateTopology();
+
         tt_topo.Toc();
 
+        // printf("Topo Time: %.3f. Ip Time: %.3f.\n", tt_topo.GetLastStop());
+    }
+
+    void GazeboPPComPlugin::OnUpdateCheckInterestPoints(const common::UpdateInfo &_info)
+    {
+        if (kPrintOnUpdates)
+            gzdbg << __FUNCTION__ << "() called." << endl;
+
+        // common::Time current_time = world_->SimTime();
+
+        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
+            return;
+        
         TicToc tt_ip;
         
         // Update the interest point
-        UpdateInterestPoint();
+        UpdateInterestPoints();
         
         tt_ip.Toc();
 
-
-        // printf("Topo Time: %.3f. Ip Time: %.3f. Total: %.3f\n",
-        //         tt_topo.GetLastStop(), tt_ip.GetLastStop(), tt_update.Toc());
-
+        // printf("Ip Time: %.3f.\n", tt_ip.GetLastStop());
     }
 
     void GazeboPPComPlugin::readPCloud(std::string filename)
@@ -736,7 +646,6 @@ namespace gazebo
                 end_point = ignition::math::Vector3d(pb.x(), pb.y(), pb.z());
 
                 ray->SetPoints(start_point, end_point);
-
                 ray->GetIntersection(rtDist, entity_name);
 
                 ppDist = (pa - pb).norm();
