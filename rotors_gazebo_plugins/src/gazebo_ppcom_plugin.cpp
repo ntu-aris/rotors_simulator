@@ -225,6 +225,16 @@ namespace gazebo
             node.ray_camera = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
                                 (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
 
+            if (node.name == "gcs") continue;
+            node.timer_update = ros_node_handle_->createTimer(ros::Duration(1.0 / gimbal_update_hz_),
+                                boost::bind(&GazeboPPComPlugin::TimerCallback, this, _1, node_idx));
+
+            node.gimbal_sub
+                = ros_node_handle_->subscribe<geometry_msgs::Twist>("/" + node.name + "/command/gimbal", 1,
+                                    boost::bind(&GazeboPPComPlugin::GimbalCallback, this, _1, node_idx));
+            node.gimbal_cmd = Eigen::VectorXd(6);
+            node.gimbal_cmd.setZero();
+            node.gimbal_cmd_last_update = ros::Time::now();
         }
         
         cloud_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
@@ -232,6 +242,18 @@ namespace gazebo
         // Listen to the update event. This event is broadcast every simulation iteration.
         last_time_topo_ = world_->SimTime();
         this->updateConnection_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboPPComPlugin::OnUpdate, this, _1));
+    }
+
+    void GazeboPPComPlugin::GimbalCallback(const geometry_msgs::TwistConstPtr &msg, int node_idx)
+    {
+        ppcom_nodes_[node_idx].gimbal_cmd_last_update = ros::Time::now();
+        ppcom_nodes_[node_idx].gimbal_cmd(0) = msg->linear.x;
+        ppcom_nodes_[node_idx].gimbal_cmd(1) = msg->linear.y;
+        ppcom_nodes_[node_idx].gimbal_cmd(2) = msg->linear.z;
+        ppcom_nodes_[node_idx].gimbal_cmd(3) = msg->angular.x;
+        ppcom_nodes_[node_idx].gimbal_cmd(4) = msg->angular.y;
+        ppcom_nodes_[node_idx].gimbal_cmd(5) = msg->angular.z;
+
     }
 
     void GazeboPPComPlugin::OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx)
@@ -462,8 +484,9 @@ namespace gazebo
                 pos_cam.x = p_cam_world(0);
                 pos_cam.y = p_cam_world(1);
                 pos_cam.z = p_cam_world(2);
-                node_i.cam_rpy = Vector3d(0.0, 0.0, tf_uav.yaw());
-                myTf<double> tf_cam(Util::YPR2Rot(node_i.cam_rpy), p_cam_world);            
+                // node_i.cam_rpy = Vector3d(0.0, node_i., tf_uav.yaw());
+                Vector3d rpy(0.0, node_i.cam_rpy(1)/M_PI*180.0, tf_uav.yaw()+node_i.cam_rpy(2)/M_PI*180.0);
+                myTf<double> tf_cam(Util::YPR2Rot(rpy), p_cam_world);            
 
                 std::vector<int> k_idx;
                 std::vector<float> k_distances;
@@ -501,10 +524,9 @@ namespace gazebo
                     double visualized = false;
                     if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_camera))
                     {
-                        node_i.cam_rpy_rate = Vector3d(node_i.odom_msg.twist.twist.angular.x, 
-                                                        node_i.odom_msg.twist.twist.angular.y, 
-                                                        node_i.odom_msg.twist.twist.angular.z);
-                        Vector3d v_point_in_cam = - Util::skewSymmetric(node_i.cam_rpy_rate) * InPoint_cam -
+                        Vector3d rpy_rate = Vector3d(0.0, node_i.cam_rpy_rate(1), 
+                                                node_i.cam_rpy_rate(2) + node_i.odom_msg.twist.twist.angular.z);
+                        Vector3d v_point_in_cam = - Util::skewSymmetric(rpy_rate) * InPoint_cam -
                                                     tf_cam.rot.inverse()*v_cam_world;
                         //horizontal camera pixels
                         double pixel_move_v = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(1) *
@@ -673,6 +695,45 @@ namespace gazebo
         // printf("Topo Time: %.3f. Ip Time: %.3f. Total: %.3f\n",
         //         tt_topo.GetLastStop(), tt_ip.GetLastStop(), tt_update.Toc());
 
+    }
+    void GazeboPPComPlugin::TimerCallback(const ros::TimerEvent &, int node_idx)
+    {
+        PPComNode &node_i = ppcom_nodes_[node_idx];
+        if (node_i.name == "gcs") return;
+        if (node_i.gimbal_cmd(0)<-1e-7 && 
+            (ros::Time::now()-node_i.gimbal_cmd_last_update).toSec()> 2.0/gimbal_update_hz_)
+        {
+            //change from rate control to angle control
+            node_i.gimbal_cmd(0) = 0.1;
+            node_i.gimbal_cmd(1) = node_i.cam_rpy(1);
+            node_i.gimbal_cmd(2) = node_i.cam_rpy(2);
+        }
+        if (node_i.gimbal_cmd(0)>0.0) //angle control mode
+        {
+            double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, Util::wrapToPi(node_i.gimbal_cmd(1))));
+            double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, Util::wrapToPi(node_i.gimbal_cmd(2))));
+            // double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, (node_i.gimbal_cmd(1))));
+            // double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, (node_i.gimbal_cmd(2))));
+
+            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_, 
+                                        (pitch_cmd - node_i.cam_rpy(1))*gimbal_update_hz_));
+            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_, 
+                                        (yaw_cmd - node_i.cam_rpy(2))*gimbal_update_hz_));
+            node_i.cam_rpy(1) = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1)*1.0/gimbal_update_hz_;
+            node_i.cam_rpy(2) = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2)*1.0/gimbal_update_hz_;
+
+        }        
+        if (node_i.gimbal_cmd(0)<-1e-7) //rate control mode
+        {   
+            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(4)));
+            double pitch = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1)*1.0/gimbal_update_hz_;
+            node_i.cam_rpy(1) = max(-gimbal_pitch_max_, min(gimbal_pitch_max_, pitch));
+
+            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(5)));
+            double yaw = node_i.cam_rpy(2) +  node_i.cam_rpy_rate(2)*1.0/gimbal_update_hz_;
+            node_i.cam_rpy(2) = max(-gimbal_yaw_max_, min(gimbal_yaw_max_, yaw));
+        }
+        
     }
 
     void GazeboPPComPlugin::readPCloud(std::string filename)

@@ -126,13 +126,14 @@ if (NOT NO_ROS)
     tf
     pcl_conversions
     pcl_ros
+    geometry_msgs
   )
 endif()
 
 message(STATUS "CMAKE_BINARY_DIR = ${CMAKE_BINARY_DIR}" )
 
 find_package(Eigen REQUIRED)
-find_package(gazebo_dev QUIET)
+# find_package(gazebo_dev QUIET PATHS /usr/include/gazebo-11)
 if (NOT GAZEBO_DEV_FOUND)
   find_package(gazebo REQUIRED)
 endif()

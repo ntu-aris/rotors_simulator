@@ -31,6 +31,7 @@
 #include "rotors_joy_interface/utility.h"
 #include <trajectory_msgs/MultiDOFJointTrajectory.h>
 #include "Eigen/Dense"
+#include "geometry_msgs/Twist.h"
 
 struct Axes {
   int roll;
@@ -63,7 +64,7 @@ class Joy {
 
  private:
   ros::NodeHandle nh_;
-  ros::Publisher ctrl_pub_, cmd_pub_;
+  ros::Publisher ctrl_pub_, cmd_pub_, gim_cmd_pub_;
   ros::Subscriber joy_sub_, odom_sub_;
   ros::Timer timer;
   std::string namespace_;

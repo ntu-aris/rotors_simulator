@@ -12,7 +12,7 @@ from pygame.locals import *
 pygame.init()
 BLACK = (0,0,0)
 WIDTH = 335
-HEIGHT = 406
+HEIGHT = 730
 windowSurface = pygame.display.set_mode((WIDTH, HEIGHT), 0, 32)
 windowSurface.fill(BLACK)
 pygame.display.set_caption('Virtual RC Joystick')
@@ -159,24 +159,31 @@ def main():
         uinput.ABS_Y + (0, 255, 0, 0),
         uinput.ABS_THROTTLE + (0, 255, 0, 0),
         uinput.ABS_RUDDER + (0, 255, 0, 0),
+        uinput.ABS_TILT_X + (0, 255, 0, 0),
+        uinput.ABS_TILT_Y + (0, 255, 0, 0),
         )
 
     sticks = []
 
     # create sticks
-    roll_stick = stick_state('Roll', uinput.ABS_X, K_RIGHT, K_LEFT)
+    roll_stick = stick_state('Roll: LEFT RIGHT', uinput.ABS_X, K_RIGHT, K_LEFT)
     roll_stick.set_display(21, 39, True)
     sticks.append(roll_stick)
-    pitch_stick = stick_state('Pitch', uinput.ABS_Y, K_UP, K_DOWN)
+    pitch_stick = stick_state('Pitch: UP DOWN', uinput.ABS_Y, K_UP, K_DOWN)
     pitch_stick.set_display(328, 198, False)
     sticks.append(pitch_stick)
-    thr_stick = stick_state('Throttle', uinput.ABS_THROTTLE, K_w, K_s)
+    thr_stick = stick_state('Throttle: WS', uinput.ABS_THROTTLE, K_w, K_s)
     thr_stick.set_display(328, 95, False)
     sticks.append(thr_stick)
-    rud_stick = stick_state('Yaw', uinput.ABS_RUDDER, K_d, K_a)
+    rud_stick = stick_state('Yaw: AD', uinput.ABS_RUDDER, K_d, K_a)
     rud_stick.set_display(360, 39, True)
     sticks.append(rud_stick)
-
+    campit_stick = stick_state('CamPitch: YH', uinput.ABS_TILT_X, K_y, K_h)
+    campit_stick.set_display(710, 95, False)
+    sticks.append(campit_stick)    
+    camyaw_stick = stick_state('CamYaw: GJ', uinput.ABS_TILT_Y, K_j, K_g)
+    camyaw_stick.set_display(410, 39, True)
+    sticks.append(camyaw_stick)
     with uinput.Device(events) as device:
         while True:
             # event handling loop
