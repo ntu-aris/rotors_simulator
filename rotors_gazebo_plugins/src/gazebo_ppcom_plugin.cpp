@@ -101,13 +101,13 @@ namespace gazebo
         // default params
         namespace_.clear();
 
-        // Create a rayshape object for communication links
-        ray_topo_ = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                            (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+        // // Create a rayshape object for communication links
+        // ray_topo_ = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+        //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
 
-        // Create rayshape object for camera field of view check
-        ray_inpo_ = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                            (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
+        // // Create rayshape object for camera field of view check
+        // ray_inpo_ = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+        //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
 
         //==============================================//
         //========== READ IN PARAMS FROM SDF ===========//
@@ -225,14 +225,27 @@ namespace gazebo
             // Create the storage of nodes to each object
             node.odom_msg_received = false;
 
-            // // Create a rayshape object for communication link
-            // node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-            //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+            // Create a rayshape object for communication link
+            node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
 
-            // // Create rayshape object for camera field of view check
-            // node.ray_camera = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-            //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
+            // Create rayshape object for camera field of view check
+            node.ray_inpo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
+                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
 
+            if (node.name == "gcs")
+                continue;
+            
+            node.timer_update = ros_node_handle_->createTimer(ros::Duration(1.0 / gimbal_update_hz_),
+                                boost::bind(&GazeboPPComPlugin::TimerCallback, this, _1, node_idx));
+
+            node.gimbal_sub
+                = ros_node_handle_->subscribe<geometry_msgs::Twist>("/" + node.name + "/command/gimbal", 1,
+                                    boost::bind(&GazeboPPComPlugin::GimbalCallback, this, _1, node_idx));
+
+            node.gimbal_cmd = Eigen::VectorXd(6);
+            node.gimbal_cmd.setZero();
+            node.gimbal_cmd_last_update = ros::Time::now();
         }
         
         cloud_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
@@ -242,6 +255,17 @@ namespace gazebo
         last_time_inpo_ = last_time_topo_;
         this->updateConnection_topology_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboPPComPlugin::OnUpdateCheckTopology, this, _1));
         this->updateConnection_interestpoints_ = event::Events::ConnectWorldUpdateBegin(boost::bind(&GazeboPPComPlugin::OnUpdateCheckInterestPoints, this, _1));
+    }
+
+    void GazeboPPComPlugin::GimbalCallback(const geometry_msgs::TwistConstPtr &msg, int node_idx)
+    {
+        ppcom_nodes_[node_idx].gimbal_cmd_last_update = ros::Time::now();
+        ppcom_nodes_[node_idx].gimbal_cmd(0) = msg->linear.x;
+        ppcom_nodes_[node_idx].gimbal_cmd(1) = msg->linear.y;
+        ppcom_nodes_[node_idx].gimbal_cmd(2) = msg->linear.z;
+        ppcom_nodes_[node_idx].gimbal_cmd(3) = msg->angular.x;
+        ppcom_nodes_[node_idx].gimbal_cmd(4) = msg->angular.y;
+        ppcom_nodes_[node_idx].gimbal_cmd(5) = msg->angular.z;
     }
 
     void GazeboPPComPlugin::OdomCallback(const nav_msgs::OdometryConstPtr &msg, int node_idx)
@@ -288,7 +312,7 @@ namespace gazebo
                                 node_j.odom_msg.pose.pose.position.y,
                                 node_j.odom_msg.pose.pose.position.z);
 
-                    los_check[i][j] = los_check[j][i] = CheckTopoLOS(pi, node_i.offset, pj, node_j.offset, ray_topo_);
+                    los_check[i][j] = los_check[j][i] = CheckTopoLOS(pi, node_i.offset, pj, node_j.offset, node_i.ray_topo);
 
                     // Assign the distance if there is line of sight
                     if (los_check[i][j])
@@ -365,8 +389,9 @@ namespace gazebo
                 pos_cam.x = p_cam_world(0);
                 pos_cam.y = p_cam_world(1);
                 pos_cam.z = p_cam_world(2);
-                node_i.cam_rpy = Vector3d(0.0, 0.0, tf_uav.yaw());
-                myTf<double> tf_cam(Util::YPR2Rot(node_i.cam_rpy), p_cam_world);            
+                // node_i.cam_rpy = Vector3d(0.0, node_i., tf_uav.yaw());
+                Vector3d rpy(0.0, node_i.cam_rpy(1)/M_PI*180.0, tf_uav.yaw()+node_i.cam_rpy(2)/M_PI*180.0);
+                myTf<double> tf_cam(Util::YPR2Rot(rpy), p_cam_world);            
 
                 std::vector<int> k_idx;
                 std::vector<float> k_distances;
@@ -402,13 +427,13 @@ namespace gazebo
                         continue;
 
                     double visualized = false;
-                    if (CheckInterestPointLOS(p_cam_world, InPoint_world, ray_inpo_))
+                    if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_inpo))
                     {
-                        node_i.cam_rpy_rate = Vector3d(node_i.odom_msg.twist.twist.angular.x, 
-                                                       node_i.odom_msg.twist.twist.angular.y, 
-                                                       node_i.odom_msg.twist.twist.angular.z);
-                        Vector3d v_point_in_cam = - Util::skewSymmetric(node_i.cam_rpy_rate) * InPoint_cam -
-                                                    tf_cam.rot.inverse()*v_cam_world;
+
+                        Vector3d rpy_rate = Vector3d(0.0, node_i.cam_rpy_rate(1), 
+                                                node_i.cam_rpy_rate(2) + node_i.odom_msg.twist.twist.angular.z);
+                        Vector3d v_point_in_cam = - Util::skewSymmetric(rpy_rate) * InPoint_cam -
+                                                        tf_cam.rot.inverse()*v_cam_world;
                         //horizontal camera pixels
                         double pixel_move_v = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(1) *
                                                 node_i.exposure/node_i.pixel_size;
@@ -583,6 +608,46 @@ namespace gazebo
         tt_ip.Toc();
 
         // printf("Ip Time: %.3f.\n", tt_ip.GetLastStop());
+    }
+
+    void GazeboPPComPlugin::TimerCallback(const ros::TimerEvent &, int node_idx)
+    {
+        PPComNode &node_i = ppcom_nodes_[node_idx];
+        if (node_i.name == "gcs") return;
+        if (node_i.gimbal_cmd(0)<-1e-7 && 
+            (ros::Time::now()-node_i.gimbal_cmd_last_update).toSec()> 2.0/gimbal_update_hz_)
+        {
+            //change from rate control to angle control
+            node_i.gimbal_cmd(0) = 0.1;
+            node_i.gimbal_cmd(1) = node_i.cam_rpy(1);
+            node_i.gimbal_cmd(2) = node_i.cam_rpy(2);
+        }
+        if (node_i.gimbal_cmd(0)>0.0) //angle control mode
+        {
+            double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, Util::wrapToPi(node_i.gimbal_cmd(1))));
+            double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, Util::wrapToPi(node_i.gimbal_cmd(2))));
+            // double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, (node_i.gimbal_cmd(1))));
+            // double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, (node_i.gimbal_cmd(2))));
+
+            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_, 
+                                        (pitch_cmd - node_i.cam_rpy(1))*gimbal_update_hz_));
+            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_, 
+                                        (yaw_cmd - node_i.cam_rpy(2))*gimbal_update_hz_));
+            node_i.cam_rpy(1) = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1)*1.0/gimbal_update_hz_;
+            node_i.cam_rpy(2) = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2)*1.0/gimbal_update_hz_;
+
+        }        
+        if (node_i.gimbal_cmd(0)<-1e-7) //rate control mode
+        {   
+            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(4)));
+            double pitch = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1)*1.0/gimbal_update_hz_;
+            node_i.cam_rpy(1) = max(-gimbal_pitch_max_, min(gimbal_pitch_max_, pitch));
+
+            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(5)));
+            double yaw = node_i.cam_rpy(2) +  node_i.cam_rpy_rate(2)*1.0/gimbal_update_hz_;
+            node_i.cam_rpy(2) = max(-gimbal_yaw_max_, min(gimbal_yaw_max_, yaw));
+        }
+        
     }
 
     void GazeboPPComPlugin::readPCloud(std::string filename)

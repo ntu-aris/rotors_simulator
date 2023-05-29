@@ -68,6 +68,7 @@ Joy::Joy() {
   cmd_pub_ = nh_.advertise<trajectory_msgs::MultiDOFJointTrajectory> (
   "/firefly/command/trajectory", 10);
   timer = nh_.createTimer(ros::Duration(1.0 / 10.0), &Joy::TimerCallback, this);
+  gim_cmd_pub_ = nh_.advertise<geometry_msgs::Twist> ("/firefly/command/gimbal", 10);
 }
 
 void Joy::TimerCallback(const ros::TimerEvent &)
@@ -165,7 +166,14 @@ void Joy::JoyCallback(const sensor_msgs::JoyConstPtr& msg) {
   xyz_cmd_world = Util::YPR2Rot(tf_uav.yaw(), 0.0, 0.0)*xyz_cmd_body;
   got_joy_ = true;
 
-
+  geometry_msgs::Twist gimmsg;
+  gimmsg.linear.x = -1.0;
+  gimmsg.linear.y = 0.0;
+  gimmsg.linear.z = 0.0;
+  gimmsg.angular.x = 0.0;
+  gimmsg.angular.y = msg->axes[4];
+  gimmsg.angular.z = msg->axes[5]; 
+  gim_cmd_pub_.publish(gimmsg);
 }
 
 void Joy::Publish() {

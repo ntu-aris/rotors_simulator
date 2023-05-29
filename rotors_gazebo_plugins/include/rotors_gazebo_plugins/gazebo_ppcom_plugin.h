@@ -50,6 +50,7 @@
 #include <pcl/search/kdtree.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include "utility_tm.h"
+#include "geometry_msgs/Twist.h"
 
 using namespace std;
 
@@ -74,17 +75,18 @@ struct PPComNode
     double offset = 0.0;
 
     // ray tracing object
-    // gazebo::physics::RayShapePtr ray_topo;
+    gazebo::physics::RayShapePtr ray_topo;
 
     // ray tracing object
-    // gazebo::physics::RayShapePtr ray_camera;
+    gazebo::physics::RayShapePtr ray_inpo;
 
     // Subsribed odometry subscriber
     ros::Subscriber odom_sub;
-
+    ros::Subscriber gimbal_sub;
     // Subsribed odometry subscriber
     ros::Publisher topo_pub;
     ros::Publisher camera_pyramid_pub;
+    ros::Timer timer_update;
 
     // Saved odometry message
     nav_msgs::Odometry odom_msg;
@@ -101,6 +103,8 @@ struct PPComNode
     double focal_length = 0.016; //in meter
     double exposure = 0.001; //in s
     double pixel_size = 4.35e-6; //in m
+    Eigen::VectorXd gimbal_cmd;
+    ros::Time gimbal_cmd_last_update;
 };
 
 class GazeboPPComPlugin : public ModelPlugin {
@@ -128,7 +132,9 @@ class GazeboPPComPlugin : public ModelPlugin {
   bool CheckTopoLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
   bool CheckInterestPointLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray);  
   void readPCloud(std::string filename);
-
+  void TimerCallback(const ros::TimerEvent &, int node_idx);
+  void GimbalCallback(const geometry_msgs::TwistConstPtr &msg, int node_idx);
+  
   string namespace_;
   string ppcom_topic_;
 
@@ -153,11 +159,11 @@ class GazeboPPComPlugin : public ModelPlugin {
   /// \brief  Pointer to the engine.
   physics::PhysicsEnginePtr physics_;
 
-  /// \brief // ray tracing object
-  gazebo::physics::RayShapePtr ray_topo_;
+  // /// \brief // ray tracing object
+  // gazebo::physics::RayShapePtr ray_topo_;
 
-  /// \brief // ray tracing object
-  gazebo::physics::RayShapePtr ray_inpo_;
+  // /// \brief // ray tracing object
+  // gazebo::physics::RayShapePtr ray_inpo_;
   
   /// \brief  Id of the ppcom node
   string ppcom_id_;
@@ -191,6 +197,10 @@ class GazeboPPComPlugin : public ModelPlugin {
   pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_;
   pcl::search::KdTree<pcl::PointXYZINormal> kdTreeInterestPts_;
   ros::Publisher cloud_pub_;
+  double gimbal_update_hz_ = 10.0;
+  double gimbal_rate_max_ = 45.0/180.0*M_PI;
+  double gimbal_pitch_max_ = 70.0/180.0*M_PI;
+  double gimbal_yaw_max_ = 80.0/180.0*M_PI;
 };
 
 }  // namespace gazebo

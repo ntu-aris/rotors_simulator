@@ -566,6 +566,14 @@ namespace Util
         return tempCloud;
     }
 
+    double wrapToPi(double angleinradian)
+    {
+        angleinradian = fmod(angleinradian + M_PI, 2*M_PI);
+        if (angleinradian < 0)
+            angleinradian += 2*M_PI;
+        return angleinradian - M_PI;
+    }
+
     float wrapTo360(float angle)
     {
         angle = fmod(angle, 360);
