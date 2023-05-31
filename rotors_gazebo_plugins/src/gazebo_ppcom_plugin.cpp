@@ -50,6 +50,24 @@ using namespace std;
 
 namespace gazebo
 {
+    // Constructors
+    IndexedInterestPoint::IndexedInterestPoint()
+    {
+        detected_order = -1;
+        scored_point.x = 0;
+        scored_point.y = 0;
+        scored_point.z = 0;
+        scored_point.intensity = 0;
+        scored_point.normal_x  = 0;
+        scored_point.normal_y  = 0;
+        scored_point.normal_z  = 0;
+        scored_point.curvature = 0;
+    }
+    IndexedInterestPoint::IndexedInterestPoint(const int &detected_order_, const PointXYZIN &scored_point_):
+        detected_order(detected_order_), scored_point(scored_point_) {}
+    // Simple destructor
+    IndexedInterestPoint::~IndexedInterestPoint() {};    
+
     // PPCom class, helper of the plugin
     PPComNode::PPComNode()
     {
@@ -75,10 +93,24 @@ namespace gazebo
         for (auto &c : this->odom_msg.pose.covariance)
             c = -1;
 
+        topology_mtx = boost::shared_ptr<std::mutex>(new std::mutex());
+
         Cam_rel_Uav = Vector3d(cam_x, cam_y, cam_z);
     }
 
     PPComNode::~PPComNode() {}
+
+    Eigen::MatrixXd PPComNode::GetTopology()
+    {
+       std::lock_guard<std::mutex> lock(*topology_mtx);
+       return topology;
+    }
+
+    void PPComNode::SetTopology(Eigen::MatrixXd topology_)
+    {
+       std::lock_guard<std::mutex> lock(*topology_mtx);
+       topology = topology_;
+    }
 
     // Plugin definition
     GazeboPPComPlugin::GazeboPPComPlugin()
@@ -224,6 +256,9 @@ namespace gazebo
             // Create the storage of nodes to each object
             node.odom_msg_received = false;
 
+            // Knowlege on the topology
+            node.SetTopology(-1 * MatrixXd::Ones(Nnodes_, Nnodes_));
+
             // Create a rayshape object for communication link
             node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>(physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
 
@@ -232,8 +267,22 @@ namespace gazebo
 
             // Create a pointcloud of detected points
             node.InPoLog = {};
+
             node.CloudDetectedInpoPub = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/" + node.name + "/detected_interest_points", 1);
 
+            // Preload the interest points for manager
+            if (node.role == "manager")
+            {
+
+                for(int i = 0; i < cloud_inpo_->size(); i++)
+                {
+                    node.InPoLog[i] = IndexedInterestPoint(i, cloud_inpo_->points[i]);
+                    node.InPoLog[i].scored_point.intensity = 0;
+                    assert(node.InPoLog[i].scored_point.curvature == i);
+                }
+            }
+
+            // GCS no need gimbal
             if (node.name == "gcs")
                 continue;
 
@@ -248,7 +297,7 @@ namespace gazebo
             node.gimbal_cmd_last_update = ros::Time::now();
         }
 
-        cloud_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
+        cloud_inpo_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
 
         // Listen to the update event. This event is broadcast every simulation iteration.
         last_time_topo_ = world_->SimTime();
@@ -272,6 +321,26 @@ namespace gazebo
     {
         ppcom_nodes_[node_idx].odom_msg = *msg;
         ppcom_nodes_[node_idx].odom_msg_received = true;
+    }
+
+    void GazeboPPComPlugin::OnUpdateCheckTopology(const common::UpdateInfo &_info)
+    {
+        if (kPrintOnUpdates)
+            gzdbg << __FUNCTION__ << "() called." << endl;
+
+        // common::Time current_time = world_->SimTime();
+
+        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
+            return;
+
+        TicToc tt_topo;
+
+        // Update the topology
+        UpdateTopology();
+
+        tt_topo.Toc();
+
+        // printf("Topo Time: %.3f. Ip Time: %.3f.\n", tt_topo.GetLastStop());
     }
 
     void GazeboPPComPlugin::UpdateTopology()
@@ -321,6 +390,8 @@ namespace gazebo
                         distMat(j, i) = distMat(i, j);
                     }
                 }
+
+                node_i.SetTopology(distMat);
             }
 
             // Publish the information of the topology
@@ -346,6 +417,29 @@ namespace gazebo
         }
     }
 
+    void GazeboPPComPlugin::OnUpdateCheckInterestPoints(const common::UpdateInfo &_info)
+    {
+        if (kPrintOnUpdates)
+            gzdbg << __FUNCTION__ << "() called." << endl;
+
+        // common::Time current_time = world_->SimTime();
+
+        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
+            return;
+
+        TicToc tt_ip;
+
+        // Update the interest point
+        UpdateInterestPoints();
+
+        tt_ip.Toc();
+
+        // Calculate and publish the score
+        TallyScore();
+
+        // printf("Ip Time: %.3f.\n", tt_ip.GetLastStop());
+    }
+
     void GazeboPPComPlugin::UpdateInterestPoints()
     {
         gazebo::common::Time current_time = world_->SimTime();
@@ -356,7 +450,9 @@ namespace gazebo
             for (int i = 0; i < Nnodes_; i++)
             {
                 PPComNode &node_i = ppcom_nodes_[i];
-                
+                std::map<int, IndexedInterestPoint> &nodeIPLog = node_i.InPoLog;
+
+                // GCS no need to check detection
                 if (node_i.name == "gcs")
                     continue;
 
@@ -412,7 +508,7 @@ namespace gazebo
 
                 for (int j = 0; j < k_idx.size(); j++) //
                 {
-                    PointXYZIN &kpoint = cloud_->points[k_idx[j]];
+                    PointXYZIN &kpoint = cloud_inpo_->points[k_idx[j]];
                     assert(kpoint.curvature == k_idx[j]);
                     Vector3d InPoint_world(kpoint.x, kpoint.y, kpoint.z);
                     Vector3d InPoint_cam = tf_cam.inverse() * InPoint_world;
@@ -473,43 +569,22 @@ namespace gazebo
                         }
 
                         // std::cout<<"mm_per pixel u is "<<mm_per_pixel_u<<"mm_per pixel v is "<<mm_per_pixel_v<<std::endl;
-                        if (score > cloud_->points[k_idx[j]].intensity)
-                            cloud_->points[k_idx[j]].intensity = score;
+                        if (score > cloud_inpo_->points[k_idx[j]].intensity)
+                            cloud_inpo_->points[k_idx[j]].intensity = score;
 
                         detected_point.intensity = score;
                         int point_idx = (int)detected_point.curvature;
 
-                        std::map<int, std::pair<int, PointXYZIN>> &nodeIPLog = node_i.InPoLog;
                         if (nodeIPLog.find(point_idx) == nodeIPLog.end())
-                            nodeIPLog[point_idx] = make_pair(nodeIPLog.size(), detected_point);
-                        else if (nodeIPLog[point_idx].second.intensity < detected_point.intensity)
-                            nodeIPLog[point_idx] = make_pair(nodeIPLog[point_idx].first, detected_point);;
+                            nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog.size(), detected_point);
+                        else if (nodeIPLog[point_idx].scored_point.intensity < detected_point.intensity)
+                            nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog[point_idx].detected_order, detected_point); 
 
-                        // Copy the detected points to the cloud and publish it
-                        CloudXYZINPtr CloudDtectedInPo(new CloudXYZIN());
-                        
-                        TicToc tt_paral;
-                        // if (nodeIPLog.size() > 1000)
-                        // {
-                            CloudDtectedInPo->resize(nodeIPLog.size());
-                            #pragma omp parallel for num_threads(MAX_THREADS)
-                            for(map< int, pair<int, PointXYZIN> >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
-                                CloudDtectedInPo->points[itr->second.first] = itr->second.second;
-                        // }
-                        tt_paral.Toc();
-
-                        // TicToc tt_sequential;
                         // CloudDtectedInPo->clear();
                         // for(map< int, pair<int, PointXYZIN> >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
                         //     CloudDtectedInPo->push_back(itr->second.second);
                         
-                        // tt_sequential.Toc();
-
-                        printf("Loading time. Parallel: %f. Seq: %f\n", tt_paral, tt_sequential);
-
-                        Util::publishCloud(node_i.CloudDetectedInpoPub, *CloudDtectedInPo, ros::Time::now(), "world");    
-
-                        // if (visualized) continue;
+                        // // if (visualized) continue;
                         // visualized = true;
                         // visualization_msgs::Marker m;
                         // m.type   = visualization_msgs::Marker::ARROW;
@@ -543,6 +618,22 @@ namespace gazebo
                     }
                 }
 
+                // Copy the detected points to the cloud and publish it
+                CloudXYZINPtr CloudDtectedInPo(new CloudXYZIN());
+                CloudDtectedInPo->resize(nodeIPLog.size());
+
+                // Copy the points into the pointcloud structure
+                #pragma omp parallel for num_threads(MAX_THREADS)
+                for(map< int, IndexedInterestPoint >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
+                {
+                    CloudDtectedInPo->points[itr->second.detected_order] = itr->second.scored_point;
+                    CloudDtectedInPo->points[itr->second.detected_order].curvature = itr->second.detected_order;
+                }
+
+                // Publish the pointcloud
+                Util::publishCloud(node_i.CloudDetectedInpoPub, *CloudDtectedInPo, ros::Time::now(), "world");   
+
+                // Visualize the frustrum
                 std::vector<Vector3d> point_list_in_world;
                 point_list_in_world.push_back(p_cam_world);
                 for (double k : {1.0, -1.0})
@@ -601,50 +692,64 @@ namespace gazebo
                 node_i.camera_pyramid_pub.publish(m);
             }
 
-            Util::publishCloud(cloud_pub_, *cloud_, ros::Time::now(), "world");
+            Util::publishCloud(cloud_inpo_pub_, *cloud_inpo_, ros::Time::now(), "world");
         }
     }
-
-    void GazeboPPComPlugin::OnUpdateCheckTopology(const common::UpdateInfo &_info)
+    
+    void GazeboPPComPlugin::TallyScore()
     {
-        if (kPrintOnUpdates)
-            gzdbg << __FUNCTION__ << "() called." << endl;
+        // Go through the log of each node in line of sight of GCS to tally the score
+        for (int i = 0; i < Nnodes_; i++)
+        {
+            PPComNode &node_i = ppcom_nodes_[i];
+            std::map<int, IndexedInterestPoint> &node_i_iplog = node_i.InPoLog;
 
-        // common::Time current_time = world_->SimTime();
+            // GCS no need to check detection
+            if (node_i.name != "gcs")
+                continue;
+            
+            Eigen::MatrixXd topology = node_i.GetTopology();
 
-        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
-            return;
+            // printf("Topo: \n");
+            // cout << topology << endl;
 
-        TicToc tt_topo;
+            // Check for other nodes in line of sight
+            for(int j = i+1; j < Nnodes_; j++)
+            {
+                // If no link, continue
+                if(topology(i, j) <= 0.0)
+                    continue;
 
-        // Update the topology
-        UpdateTopology();
+                PPComNode &node_j = ppcom_nodes_[j];
+                std::map<int, IndexedInterestPoint> &node_j_iplog = node_j.InPoLog;    
 
-        tt_topo.Toc();
+                // Check the IPLog of the neigbour and update the score
+                #pragma omp parallel for num_threads(MAX_THREADS)
+                for(map< int, IndexedInterestPoint >::iterator itr = node_j_iplog.begin(); itr != node_j_iplog.end(); itr++)
+                {
+                    int global_idx = itr->second.scored_point.curvature;
+                    float ip_score_from_nbr = itr->second.scored_point.intensity;
 
-        // printf("Topo Time: %.3f. Ip Time: %.3f.\n", tt_topo.GetLastStop());
+                    assert(node_i_iplog[global_idx].scored_point.curvature == global_idx);
+
+                    if (node_i_iplog[global_idx].scored_point.intensity < ip_score_from_nbr)
+                        node_i_iplog[global_idx].scored_point.intensity = ip_score_from_nbr;
+                }
+            }
+
+            double total_detected = 0;
+            double total_score = 0;
+            for(map< int, IndexedInterestPoint >::iterator itr = node_i_iplog.begin(); itr != node_i_iplog.end(); itr++)
+            {
+                if (itr->second.scored_point.intensity > 0.0)
+                    total_detected++;
+
+                total_score += itr->second.scored_point.intensity;
+            }
+            printf("Total detected: %5f. Score: %6.3f\n", total_detected, total_score);
+        }
     }
-
-    void GazeboPPComPlugin::OnUpdateCheckInterestPoints(const common::UpdateInfo &_info)
-    {
-        if (kPrintOnUpdates)
-            gzdbg << __FUNCTION__ << "() called." << endl;
-
-        // common::Time current_time = world_->SimTime();
-
-        if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
-            return;
-
-        TicToc tt_ip;
-
-        // Update the interest point
-        UpdateInterestPoints();
-
-        tt_ip.Toc();
-
-        // printf("Ip Time: %.3f.\n", tt_ip.GetLastStop());
-    }
-
+    
     void GazeboPPComPlugin::TimerCallback(const ros::TimerEvent &, int node_idx)
     {
         PPComNode &node_i = ppcom_nodes_[node_idx];
@@ -686,9 +791,8 @@ namespace gazebo
 
     void GazeboPPComPlugin::readPCloud(std::string filename)
     {
-        CloudXYZINPtr cloud(new CloudXYZIN);
-        cloud_ = cloud;
-        if (pcl::io::loadPCDFile<PointXYZIN>(filename, *cloud_) == -1) // load point cloud file
+        cloud_inpo_ = CloudXYZINPtr(new CloudXYZIN);
+        if (pcl::io::loadPCDFile<PointXYZIN>(filename, *cloud_inpo_) == -1) // load point cloud file
         {
             PCL_ERROR("Could not read the file");
             return;
@@ -696,22 +800,22 @@ namespace gazebo
 
         // Add the point index into the curvature field
         #pragma omp parallel for num_threads(MAX_THREADS)
-        for(int i = 0; i < cloud->size(); i++)
-            cloud_->points[i].curvature = i;
+        for(int i = 0; i < cloud_inpo_->size(); i++)
+            cloud_inpo_->points[i].curvature = i;
 
-        std::cout << "Loaded" << cloud_->width * cloud_->height
+        std::cout << "Loaded" << cloud_inpo_->width * cloud_inpo_->height
                   << "data points with the following fields: "
                   << std::endl;
 
-        // for(size_t i = 0; i < cloud_->points.size(); ++i)
-        //     std::cout << "    " << cloud_->points[i].x
-        //               << " "    << cloud_->points[i].y
-        //               << " "    << cloud_->points[i].z
-        //               << " "    << cloud_->points[i].normal_x
-        //               << " "    << cloud_->points[i].normal_y
-        //               << " "    << cloud_->points[i].normal_z << std::endl;
+        // for(size_t i = 0; i < cloud_inpo_->points.size(); ++i)
+        //     std::cout << "    " << cloud_inpo_->points[i].x
+        //               << " "    << cloud_inpo_->points[i].y
+        //               << " "    << cloud_inpo_->points[i].z
+        //               << " "    << cloud_inpo_->points[i].normal_x
+        //               << " "    << cloud_inpo_->points[i].normal_y
+        //               << " "    << cloud_inpo_->points[i].normal_z << std::endl;
 
-        kdTreeInterestPts_.setInputCloud(cloud_);
+        kdTreeInterestPts_.setInputCloud(cloud_inpo_);
     }
 
     bool GazeboPPComPlugin::CheckTopoLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray)

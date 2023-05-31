@@ -24,7 +24,7 @@
 #ifndef ROTORS_GAZEBO_PLUGINS_PPCOM_PLUGIN_H
 #define ROTORS_GAZEBO_PLUGINS_PPCOM_PLUGIN_H
 
-#include<set>
+// #include<set>
 #include <random>
 
 #include <Eigen/Core>
@@ -60,6 +60,17 @@ typedef pcl::PointCloud<PointXYZIN>::Ptr CloudXYZINPtr;
 
 namespace gazebo {
 
+struct IndexedInterestPoint
+{
+  IndexedInterestPoint();
+  IndexedInterestPoint(const int &detected_order_, const PointXYZIN &scored_point_);
+  ~IndexedInterestPoint();
+  
+  // Detected order
+  int detected_order;
+  PointXYZIN scored_point;
+};
+
 // Object to store the node info
 struct PPComNode
 {
@@ -67,8 +78,11 @@ struct PPComNode
     PPComNode(const string &name_, const string &role_, const double &offset_);
     PPComNode(const string &name_, const string &role_, const double &offset_,
               const double &hfov, const double &vfov, const double &cam_x,
-              const double &cam_y, const double &cam_z);   
+              const double &cam_y, const double &cam_z);
    ~PPComNode();
+
+    Eigen::MatrixXd GetTopology();
+    void SetTopology(Eigen::MatrixXd topology_);
     
     // Name of the node
     string name = "";
@@ -83,10 +97,6 @@ struct PPComNode
 
     // ray tracing object
     gazebo::physics::RayShapePtr ray_inpo;
-
-    // Detected interest points
-    std::map<int, std::pair<int, PointXYZIN>> InPoLog; // Log of detected interest point, first int is the idx in the global ip cloud, 2nd int is the detection order
-    ros::Publisher CloudDetectedInpoPub;
 
     // Subsribed odometry subscriber
     ros::Subscriber odom_sub;
@@ -104,6 +114,15 @@ struct PPComNode
 
     bool odom_msg_received = false;
 
+    // Camera data
+    boost::shared_ptr<std::mutex> topology_mtx;
+    Eigen::MatrixXd topology;
+
+    // Detected interest points
+    std::map<int, IndexedInterestPoint> InPoLog;
+    ros::Publisher CloudDetectedInpoPub;
+
+    // Camera params
     Eigen::Vector3d Cam_rel_Uav;
     Eigen::Vector3d cam_rpy;
     Eigen::Vector3d cam_rpy_rate;
@@ -141,7 +160,8 @@ class GazeboPPComPlugin : public ModelPlugin {
   void UpdateTopology();
   void UpdateInterestPoints();
   bool CheckTopoLOS(const Vector3d &pi, double bi, const Vector3d &pj, double bj, gazebo::physics::RayShapePtr &ray);
-  bool CheckInterestPointLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray);  
+  bool CheckInterestPointLOS(const Eigen::Vector3d &pi, const Eigen::Vector3d &pj, gazebo::physics::RayShapePtr &ray);
+  void TallyScore();
   void readPCloud(std::string filename);
   void TimerCallback(const ros::TimerEvent &, int node_idx);
   void GimbalCallback(const geometry_msgs::TwistConstPtr &msg, int node_idx);
@@ -197,11 +217,11 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   /// \brief  Update time for the topology
   double cam_evaluate_hz_ = 10;
-
   common::Time last_time_topo_, last_time_inpo_;
-  CloudXYZINPtr cloud_;
+
   pcl::search::KdTree<PointXYZIN> kdTreeInterestPts_;
-  ros::Publisher cloud_pub_;
+  CloudXYZINPtr cloud_inpo_;
+  ros::Publisher cloud_inpo_pub_;
   double gimbal_update_hz_ = 10.0;
   double gimbal_rate_max_  = 45.0/180.0*M_PI;
   double gimbal_pitch_max_ = 70.0/180.0*M_PI;
