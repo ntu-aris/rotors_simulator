@@ -24,6 +24,7 @@
 #ifndef ROTORS_GAZEBO_PLUGINS_PPCOM_PLUGIN_H
 #define ROTORS_GAZEBO_PLUGINS_PPCOM_PLUGIN_H
 
+#include<set>
 #include <random>
 
 #include <Eigen/Core>
@@ -37,22 +38,25 @@
 // #include <ros/callback_queue.h>
 // #include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
+#include "geometry_msgs/Twist.h"
 
 // #include "Imu.pb.h"
 
 #include "rotors_gazebo_plugins/common.h"
 // #include "rotors_gazebo_plugins/gazebo_ros_interface_plugin.h"
 
-#include "utility.h"
-
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 #include <pcl/search/kdtree.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include "utility_tm.h"
-#include "geometry_msgs/Twist.h"
+
+#include "utility.h"
 
 using namespace std;
+
+typedef pcl::PointXYZINormal PointXYZIN;
+typedef pcl::PointCloud<PointXYZIN> CloudXYZIN;
+typedef pcl::PointCloud<PointXYZIN>::Ptr CloudXYZINPtr;
 
 namespace gazebo {
 
@@ -80,12 +84,19 @@ struct PPComNode
     // ray tracing object
     gazebo::physics::RayShapePtr ray_inpo;
 
+    // Detected interest points
+    std::map<int, std::pair<int, PointXYZIN>> InPoLog; // Log of detected interest point, first int is the idx in the global ip cloud, 2nd int is the detection order
+    ros::Publisher CloudDetectedInpoPub;
+
     // Subsribed odometry subscriber
     ros::Subscriber odom_sub;
     ros::Subscriber gimbal_sub;
+    
     // Subsribed odometry subscriber
     ros::Publisher topo_pub;
     ros::Publisher camera_pyramid_pub;
+    
+    // Timer on the update
     ros::Timer timer_update;
 
     // Saved odometry message
@@ -158,12 +169,6 @@ class GazeboPPComPlugin : public ModelPlugin {
 
   /// \brief  Pointer to the engine.
   physics::PhysicsEnginePtr physics_;
-
-  // /// \brief // ray tracing object
-  // gazebo::physics::RayShapePtr ray_topo_;
-
-  // /// \brief // ray tracing object
-  // gazebo::physics::RayShapePtr ray_inpo_;
   
   /// \brief  Id of the ppcom node
   string ppcom_id_;
@@ -194,13 +199,13 @@ class GazeboPPComPlugin : public ModelPlugin {
   double cam_evaluate_hz_ = 10;
 
   common::Time last_time_topo_, last_time_inpo_;
-  pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_;
-  pcl::search::KdTree<pcl::PointXYZINormal> kdTreeInterestPts_;
+  CloudXYZINPtr cloud_;
+  pcl::search::KdTree<PointXYZIN> kdTreeInterestPts_;
   ros::Publisher cloud_pub_;
   double gimbal_update_hz_ = 10.0;
-  double gimbal_rate_max_ = 45.0/180.0*M_PI;
+  double gimbal_rate_max_  = 45.0/180.0*M_PI;
   double gimbal_pitch_max_ = 70.0/180.0*M_PI;
-  double gimbal_yaw_max_ = 80.0/180.0*M_PI;
+  double gimbal_yaw_max_   = 80.0/180.0*M_PI;
 };
 
 }  // namespace gazebo

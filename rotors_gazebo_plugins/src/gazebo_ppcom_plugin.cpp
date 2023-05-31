@@ -54,14 +54,15 @@ namespace gazebo
     PPComNode::PPComNode()
     {
         // Set cov diagonal to -1 to indicate no reception yet
-        for(auto &c : this->odom_msg.pose.covariance)
+        for (auto &c : this->odom_msg.pose.covariance)
             c = -1;
     }
+
     PPComNode::PPComNode(const string &name_, const string &role_, const double &offset_)
         : name(name_), role(role_), offset(offset_)
     {
-        // Set cov diagonal this to -1 to indicate no reception yet
-        for(auto &c : this->odom_msg.pose.covariance)
+        // Set cov diagonal to -1 to indicate no reception yet
+        for (auto &c : this->odom_msg.pose.covariance)
             c = -1;
     }
 
@@ -71,8 +72,9 @@ namespace gazebo
         : name(name_), role(role_), offset(offset_), fov_h(hfov), fov_v(vfov)
     {
         // Set cov diagonal this to -1 to indicate no reception yet
-        for(auto &c : this->odom_msg.pose.covariance)
+        for (auto &c : this->odom_msg.pose.covariance)
             c = -1;
+
         Cam_rel_Uav = Vector3d(cam_x, cam_y, cam_z);
     }
 
@@ -92,8 +94,8 @@ namespace gazebo
         gzdbg << "_model = " << _model->GetName() << endl;
 
         // Store the pointer to the model, world, and physics
-        model_   = _model;
-        world_   = model_->GetWorld();
+        model_ = _model;
+        world_ = model_->GetWorld();
         physics_ = world_->Physics();
 
         physics_->InitForThread();
@@ -107,7 +109,7 @@ namespace gazebo
 
         // // Create rayshape object for camera field of view check
         // ray_inpo_ = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-        //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
+        //                     (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
 
         //==============================================//
         //========== READ IN PARAMS FROM SDF ===========//
@@ -143,17 +145,17 @@ namespace gazebo
             fstring_ = _sdf->GetElement("interestPcd")->Get<string>();
         else
             gzerr << "[gazebo_caric_plugin] Please specify input interest points.\n";
-            
+
         // Get the ppcom topic where data is published to
         getSdfParam<string>(_sdf, "ppcomTopic", ppcom_topic_, "ppcom");
 
         // Report on params obtained from sdf
         printf(KGRN "PPCom Id %s is set. Linkname %s. Config %s!\n" RESET,
-                     ppcom_id_.c_str(), self_link_name_.c_str(), ppcom_config_.c_str());
+               ppcom_id_.c_str(), self_link_name_.c_str(), ppcom_config_.c_str());
 
         // Open the config file and read the links
         std::ifstream ppcom_config_file(ppcom_config_.c_str());
-        
+
         readPCloud(fstring_);
 
         // Read the declared nodes
@@ -163,7 +165,7 @@ namespace gazebo
         {
             // Process the line here
             cout << "Reading " << line << endl;
-            
+
             // Remove spaces in the line
             line.erase(std::remove_if(line.begin(), line.end(), ::isspace), line.end());
 
@@ -173,9 +175,8 @@ namespace gazebo
 
             // Decode the line and construct the node
             vector<string> parts = Util::split(line, ",");
-            ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2]), stod(parts[3]), 
-                                            stod(parts[4]), stod(parts[5]), stod(parts[6]),
-                                            stod(parts[7])));
+            ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2]), stod(parts[3]),
+                                             stod(parts[4]), stod(parts[5]), stod(parts[6]), stod(parts[7])));
         }
 
         // Assert that ppcom_id_ is found in the network
@@ -211,43 +212,42 @@ namespace gazebo
             node_idx++;
 
             // Create the subscriber to each nodes
-            node.odom_sub
-                = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + node.name + "/ground_truth/odometry", 1,
-                                                                  boost::bind(&GazeboPPComPlugin::OdomCallback, this, _1, node_idx));
+            node.odom_sub = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + node.name + "/ground_truth/odometry", 1,
+                                                                            boost::bind(&GazeboPPComPlugin::OdomCallback, this, _1, node_idx));
             // Publisher for the topology
-            node.topo_pub
-                = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
+            node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
 
-            // Publisher for camera pyramid visuals    
+            // Publisher for camera pyramid visuals
             node.camera_pyramid_pub = ros_node_handle_->advertise<visualization_msgs::Marker>(
-                                                    "/" + node.name + "/visualize", 1);
+                "/" + node.name + "/visualize", 1);
 
             // Create the storage of nodes to each object
             node.odom_msg_received = false;
 
             // Create a rayshape object for communication link
-            node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+            node.ray_topo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>(physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
 
             // Create rayshape object for camera field of view check
-            node.ray_inpo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>
-                                (physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));    
+            node.ray_inpo = boost::dynamic_pointer_cast<gazebo::physics::RayShape>(physics_->CreateShape("ray", gazebo::physics::CollisionPtr()));
+
+            // Create a pointcloud of detected points
+            node.InPoLog = {};
+            node.CloudDetectedInpoPub = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/" + node.name + "/detected_interest_points", 1);
 
             if (node.name == "gcs")
                 continue;
-            
-            node.timer_update = ros_node_handle_->createTimer(ros::Duration(1.0 / gimbal_update_hz_),
-                                boost::bind(&GazeboPPComPlugin::TimerCallback, this, _1, node_idx));
 
-            node.gimbal_sub
-                = ros_node_handle_->subscribe<geometry_msgs::Twist>("/" + node.name + "/command/gimbal", 1,
-                                    boost::bind(&GazeboPPComPlugin::GimbalCallback, this, _1, node_idx));
+            node.timer_update = ros_node_handle_->createTimer(ros::Duration(1.0 / gimbal_update_hz_),
+                                                              boost::bind(&GazeboPPComPlugin::TimerCallback, this, _1, node_idx));
+
+            node.gimbal_sub = ros_node_handle_->subscribe<geometry_msgs::Twist>("/" + node.name + "/command/gimbal", 1,
+                                                                                boost::bind(&GazeboPPComPlugin::GimbalCallback, this, _1, node_idx));
 
             node.gimbal_cmd = Eigen::VectorXd(6);
             node.gimbal_cmd.setZero();
             node.gimbal_cmd_last_update = ros::Time::now();
         }
-        
+
         cloud_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
 
         // Listen to the update event. This event is broadcast every simulation iteration.
@@ -279,14 +279,14 @@ namespace gazebo
         gazebo::common::Time current_time = world_->SimTime();
         double dt_topo = (current_time - last_time_topo_).Double();
         // Update the ray casting every 0.1s
-        if (dt_topo > 1.0/ppcom_hz_)
+        if (dt_topo > 1.0 / ppcom_hz_)
         {
             last_time_topo_ = current_time;
 
-            Eigen::MatrixXd distMat = -1*Eigen::MatrixXd::Ones(Nnodes_, Nnodes_);
+            Eigen::MatrixXd distMat = -1 * Eigen::MatrixXd::Ones(Nnodes_, Nnodes_);
             vector<vector<bool>> los_check(Nnodes_, vector<bool>(Nnodes_, false));
 
-            for(int i = 0; i < Nnodes_; i ++)
+            for (int i = 0; i < Nnodes_; i++)
             {
                 PPComNode &node_i = ppcom_nodes_[i];
 
@@ -298,7 +298,7 @@ namespace gazebo
                             node_i.odom_msg.pose.pose.position.y,
                             node_i.odom_msg.pose.pose.position.z);
 
-                for (int j = i+1; j < Nnodes_; j++)
+                for (int j = i + 1; j < Nnodes_; j++)
                 {
                     PPComNode &node_j = ppcom_nodes_[j];
 
@@ -329,7 +329,7 @@ namespace gazebo
             topo_msg.header.stamp = ros::Time::now();
 
             topo_msg.node_id.clear();
-            for(PPComNode &node : ppcom_nodes_)
+            for (PPComNode &node : ppcom_nodes_)
             {
                 topo_msg.node_id.push_back(node.name);
                 topo_msg.node_role.push_back(node.role);
@@ -338,10 +338,10 @@ namespace gazebo
             }
 
             topo_msg.range.clear();
-            for(int i = 0; i < Nnodes_; i++)
-                for(int j = i+1; j < Nnodes_; j++)
+            for (int i = 0; i < Nnodes_; i++)
+                for (int j = i + 1; j < Nnodes_; j++)
                     topo_msg.range.push_back(distMat(i, j));
-            
+
             ppcom_nodes_[ppcom_slf_idx_].topo_pub.publish(topo_msg);
         }
     }
@@ -350,22 +350,24 @@ namespace gazebo
     {
         gazebo::common::Time current_time = world_->SimTime();
         double dt_inspection = (current_time - last_time_inpo_).Double();
-        if (dt_inspection > 1.0/cam_evaluate_hz_)
+        if (dt_inspection > 1.0 / cam_evaluate_hz_)
         {
             last_time_inpo_ = current_time;
-            for(int i = 0; i < Nnodes_; i ++)
+            for (int i = 0; i < Nnodes_; i++)
             {
                 PPComNode &node_i = ppcom_nodes_[i];
-                if (node_i.name == "gcs") continue;
                 
+                if (node_i.name == "gcs")
+                    continue;
+
                 if (!node_i.odom_msg_received)
                     continue;
 
                 visualization_msgs::Marker m;
-                m.type   = visualization_msgs::Marker::LINE_STRIP;
+                m.type = visualization_msgs::Marker::LINE_STRIP;
                 m.action = visualization_msgs::Marker::DELETEALL;
-                m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
-                m.ns     = "view_agent_1";
+                m.id = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
+                m.ns = "view_agent_1";
 
                 m.color.a = 1.0; // Don't forget to set the alpha!
                 m.color.r = 0.0;
@@ -384,95 +386,128 @@ namespace gazebo
                 // Vector3d pi(node_i.odom_msg.pose.pose.position.x,
                 //             node_i.odom_msg.pose.pose.position.y,
                 //             node_i.odom_msg.pose.pose.position.z);
-                Vector3d p_cam_world = tf_uav*node_i.Cam_rel_Uav;
-                pcl::PointXYZINormal pos_cam;
+                Vector3d p_cam_world = tf_uav * node_i.Cam_rel_Uav;
+                PointXYZIN pos_cam;
                 pos_cam.x = p_cam_world(0);
                 pos_cam.y = p_cam_world(1);
                 pos_cam.z = p_cam_world(2);
-                // node_i.cam_rpy = Vector3d(0.0, node_i., tf_uav.yaw());
-                Vector3d rpy(0.0, node_i.cam_rpy(1)/M_PI*180.0, tf_uav.yaw()+node_i.cam_rpy(2)/M_PI*180.0);
-                myTf<double> tf_cam(Util::YPR2Rot(rpy), p_cam_world);            
+                // node_i.cam_ypr = Vector3d(0.0, node_i., tf_uav.yaw());
+                Vector3d ypr(tf_uav.yaw() + node_i.cam_rpy(2) / M_PI * 180.0, node_i.cam_rpy(1) / M_PI * 180.0, 0.0);
+                myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);
 
-                std::vector<int> k_idx;
-                std::vector<float> k_distances;
-                kdTreeInterestPts_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);        
+                std::vector<int> k_idx; std::vector<float> k_distances;
+                kdTreeInterestPts_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);
 
-                //odometry message gives velocity in body frame
-                Vector3d v_uav_world = tf_uav.rot*Vector3d(node_i.odom_msg.twist.twist.linear.x,
-                                                           node_i.odom_msg.twist.twist.linear.y,
-                                                           node_i.odom_msg.twist.twist.linear.z);
+                // odometry message gives velocity in body frame
+                Vector3d v_uav_world = tf_uav.rot * Vector3d(node_i.odom_msg.twist.twist.linear.x,
+                                                             node_i.odom_msg.twist.twist.linear.y,
+                                                             node_i.odom_msg.twist.twist.linear.z);
 
-                //angvel uav is expressed in body frame
+                // angvel uav is expressed in body frame
                 Vector3d angv_uav(node_i.odom_msg.twist.twist.angular.x,
                                   node_i.odom_msg.twist.twist.angular.y,
                                   node_i.odom_msg.twist.twist.angular.z);
 
-                Vector3d v_cam_world = v_uav_world + tf_uav.rot*Util::skewSymmetric(angv_uav)*node_i.Cam_rel_Uav;
-                
-                
+                Vector3d v_cam_world = v_uav_world + tf_uav.rot * Util::skewSymmetric(angv_uav) * node_i.Cam_rel_Uav;
+
                 for (int j = 0; j < k_idx.size(); j++) //
                 {
-                    pcl::PointXYZINormal &kpoint = cloud_->points[k_idx[j]];
+                    PointXYZIN &kpoint = cloud_->points[k_idx[j]];
+                    assert(kpoint.curvature == k_idx[j]);
                     Vector3d InPoint_world(kpoint.x, kpoint.y, kpoint.z);
-                    Vector3d InPoint_cam = tf_cam.inverse()*InPoint_world;
-                    
+                    Vector3d InPoint_cam = tf_cam.inverse() * InPoint_world;
+
                     if (InPoint_cam(0) <= 0.0)
                         continue;
-                        
-                    double horz_angle = atan(InPoint_cam(1)/InPoint_cam(0))/M_PI*180.0;
-                    double vert_angle = atan(InPoint_cam(2)/InPoint_cam(0))/M_PI*180.0;
 
-                    if (horz_angle > node_i.fov_h/2 || horz_angle < -node_i.fov_h/2 ||
-                        vert_angle > node_i.fov_v/2 || vert_angle < -node_i.fov_v/2)
+                    double horz_angle = atan(InPoint_cam(1) / InPoint_cam(0)) / M_PI * 180.0;
+                    double vert_angle = atan(InPoint_cam(2) / InPoint_cam(0)) / M_PI * 180.0;
+
+                    if (horz_angle > node_i.fov_h / 2 || horz_angle < -node_i.fov_h / 2 ||
+                        vert_angle > node_i.fov_v / 2 || vert_angle < -node_i.fov_v / 2)
                         continue;
 
                     double visualized = false;
                     if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_inpo))
                     {
+                        // Temporary point to be evaluated for actual detection
+                        PointXYZIN detected_point = kpoint; detected_point.intensity = 0;
 
-                        Vector3d rpy_rate = Vector3d(0.0, node_i.cam_rpy_rate(1), 
-                                                node_i.cam_rpy_rate(2) + node_i.odom_msg.twist.twist.angular.z);
-                        Vector3d v_point_in_cam = - Util::skewSymmetric(rpy_rate) * InPoint_cam -
-                                                        tf_cam.rot.inverse()*v_cam_world;
-                        //horizontal camera pixels
-                        double pixel_move_v = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(1) *
-                                                node_i.exposure/node_i.pixel_size;
-                        //vertical camera pixels
-                        double pixel_move_u = node_i.focal_length/InPoint_cam(0)*v_point_in_cam(2) *
-                                                node_i.exposure/node_i.pixel_size;
+                        Vector3d rpy_rate = Vector3d(0.0, node_i.cam_rpy_rate(1), node_i.cam_rpy_rate(2) + node_i.odom_msg.twist.twist.angular.z);
+                        Vector3d v_point_in_cam = -Util::skewSymmetric(rpy_rate) * InPoint_cam -
+                                                   tf_cam.rot.inverse() * v_cam_world;
+                        // horizontal camera pixels
+                        double pixel_move_v = node_i.focal_length / InPoint_cam(0) * v_point_in_cam(1) *
+                                              node_i.exposure / node_i.pixel_size;
+                        // vertical camera pixels
+                        double pixel_move_u = node_i.focal_length / InPoint_cam(0) * v_point_in_cam(2) *
+                                              node_i.exposure / node_i.pixel_size;
 
-                        double score1 = 1.0- min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
+                        double score1 = 1.0 - min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
 
                         // compute resolution requirement mm per pixel
                         Vector3d Normal_world(kpoint.normal_x, kpoint.normal_y, kpoint.normal_z);
-                        Vector3d Normal_cam = (tf_cam.rot.inverse()*Normal_world).normalized();
+                        Vector3d Normal_cam = (tf_cam.rot.inverse() * Normal_world).normalized();
                         // Normal_cam = Vector3d(-1.0, 0.0, 0.0); //for testing only
-                        Vector3d x_disp(-Normal_cam(2), 0.0, Normal_cam(0)); //the gradient projected on the x-z plane
-                        Vector3d inPoint_xplus = InPoint_cam + 0.0005*x_disp;
-                        Vector3d inPoint_xminus = InPoint_cam - 0.0005*x_disp;
-                        double v_plus = inPoint_xplus(2)*node_i.focal_length/inPoint_xplus(0);
-                        double v_minus = inPoint_xminus(2)*node_i.focal_length/inPoint_xminus(0);
-                        double mm_per_pixel_v = node_i.pixel_size/fabs(v_plus-v_minus);
+                        Vector3d x_disp(-Normal_cam(2), 0.0, Normal_cam(0)); // the gradient projected on the x-z plane
+                        Vector3d inPoint_xplus = InPoint_cam + 0.0005 * x_disp;
+                        Vector3d inPoint_xminus = InPoint_cam - 0.0005 * x_disp;
+                        double v_plus = inPoint_xplus(2) * node_i.focal_length / inPoint_xplus(0);
+                        double v_minus = inPoint_xminus(2) * node_i.focal_length / inPoint_xminus(0);
+                        double mm_per_pixel_v = node_i.pixel_size / fabs(v_plus - v_minus);
 
-                        Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); //the gradient projected on the x-y plane
-                        Vector3d inPoint_yplus = InPoint_cam + 0.0005*y_disp;
-                        Vector3d inPoint_yminus = InPoint_cam - 0.0005*y_disp;
-                        double u_plus = inPoint_yplus(1)*node_i.focal_length/inPoint_yplus(0);
-                        double u_minus = inPoint_yminus(1)*node_i.focal_length/inPoint_yminus(0);
-                        double mm_per_pixel_u = node_i.pixel_size/fabs(u_plus-u_minus);
+                        Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); // the gradient projected on the x-y plane
+                        Vector3d inPoint_yplus = InPoint_cam + 0.0005 * y_disp;
+                        Vector3d inPoint_yminus = InPoint_cam - 0.0005 * y_disp;
+                        double u_plus = inPoint_yplus(1) * node_i.focal_length / inPoint_yplus(0);
+                        double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
+                        double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
 
-                        double score2 = max(0.0, 1.0 - max(max(mm_per_pixel_v, mm_per_pixel_u)-6.0, 0.0)/10.0);
+                        double score2 = max(0.0, 1.0 - max(max(mm_per_pixel_v, mm_per_pixel_u) - 6.0, 0.0) / 10.0);
                         double score = score1 * score2;
-                        if (inPoint_yplus(0) < 0 ||inPoint_yminus(0) < 0 ||
-                            inPoint_xplus(0) < 0 ||inPoint_xminus(0) < 0)
+                        if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
+                            inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
                         {
-                            ROS_INFO("NOT RIGHT! X smaller than zero!!"); 
-                            continue;                           
+                            ROS_INFO("NOT RIGHT! X smaller than zero!!");
+                            continue;
                         }
 
                         // std::cout<<"mm_per pixel u is "<<mm_per_pixel_u<<"mm_per pixel v is "<<mm_per_pixel_v<<std::endl;
                         if (score > cloud_->points[k_idx[j]].intensity)
                             cloud_->points[k_idx[j]].intensity = score;
+
+                        detected_point.intensity = score;
+                        int point_idx = (int)detected_point.curvature;
+
+                        std::map<int, std::pair<int, PointXYZIN>> &nodeIPLog = node_i.InPoLog;
+                        if (nodeIPLog.find(point_idx) == nodeIPLog.end())
+                            nodeIPLog[point_idx] = make_pair(nodeIPLog.size(), detected_point);
+                        else if (nodeIPLog[point_idx].second.intensity < detected_point.intensity)
+                            nodeIPLog[point_idx] = make_pair(nodeIPLog[point_idx].first, detected_point);;
+
+                        // Copy the detected points to the cloud and publish it
+                        CloudXYZINPtr CloudDtectedInPo(new CloudXYZIN());
+                        
+                        TicToc tt_paral;
+                        // if (nodeIPLog.size() > 1000)
+                        // {
+                            CloudDtectedInPo->resize(nodeIPLog.size());
+                            #pragma omp parallel for num_threads(MAX_THREADS)
+                            for(map< int, pair<int, PointXYZIN> >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
+                                CloudDtectedInPo->points[itr->second.first] = itr->second.second;
+                        // }
+                        tt_paral.Toc();
+
+                        // TicToc tt_sequential;
+                        // CloudDtectedInPo->clear();
+                        // for(map< int, pair<int, PointXYZIN> >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
+                        //     CloudDtectedInPo->push_back(itr->second.second);
+                        
+                        // tt_sequential.Toc();
+
+                        printf("Loading time. Parallel: %f. Seq: %f\n", tt_paral, tt_sequential);
+
+                        Util::publishCloud(node_i.CloudDetectedInpoPub, *CloudDtectedInPo, ros::Time::now(), "world");    
 
                         // if (visualized) continue;
                         // visualized = true;
@@ -502,12 +537,12 @@ namespace gazebo
                         // point1.y = InPoint_world(1) + v_point_world(1);
                         // point1.z = InPoint_world(2) + v_point_world(2);
                         // m.points.push_back(point1);
-                        // node_i.camera_pyramid_pub.publish(m);                     
+                        // node_i.camera_pyramid_pub.publish(m);
 
                         // ROS_INFO("Setting points to high intensity!!");
                     }
                 }
-        
+
                 std::vector<Vector3d> point_list_in_world;
                 point_list_in_world.push_back(p_cam_world);
                 for (double k : {1.0, -1.0})
@@ -579,9 +614,9 @@ namespace gazebo
 
         if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
             return;
-        
+
         TicToc tt_topo;
-        
+
         // Update the topology
         UpdateTopology();
 
@@ -599,12 +634,12 @@ namespace gazebo
 
         if (ppcom_nodes_[ppcom_slf_idx_].role != "manager")
             return;
-        
+
         TicToc tt_ip;
-        
+
         // Update the interest point
         UpdateInterestPoints();
-        
+
         tt_ip.Toc();
 
         // printf("Ip Time: %.3f.\n", tt_ip.GetLastStop());
@@ -613,52 +648,57 @@ namespace gazebo
     void GazeboPPComPlugin::TimerCallback(const ros::TimerEvent &, int node_idx)
     {
         PPComNode &node_i = ppcom_nodes_[node_idx];
-        if (node_i.name == "gcs") return;
-        if (node_i.gimbal_cmd(0)<-1e-7 && 
-            (ros::Time::now()-node_i.gimbal_cmd_last_update).toSec()> 2.0/gimbal_update_hz_)
+        if (node_i.name == "gcs")
+            return;
+        if (node_i.gimbal_cmd(0) < -1e-7 &&
+            (ros::Time::now() - node_i.gimbal_cmd_last_update).toSec() > 2.0 / gimbal_update_hz_)
         {
-            //change from rate control to angle control
+            // change from rate control to angle control
             node_i.gimbal_cmd(0) = 0.1;
             node_i.gimbal_cmd(1) = node_i.cam_rpy(1);
             node_i.gimbal_cmd(2) = node_i.cam_rpy(2);
         }
-        if (node_i.gimbal_cmd(0)>0.0) //angle control mode
+        if (node_i.gimbal_cmd(0) > 0.0) // angle control mode
         {
             double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, Util::wrapToPi(node_i.gimbal_cmd(1))));
             double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, Util::wrapToPi(node_i.gimbal_cmd(2))));
             // double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, (node_i.gimbal_cmd(1))));
             // double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, (node_i.gimbal_cmd(2))));
 
-            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_, 
-                                        (pitch_cmd - node_i.cam_rpy(1))*gimbal_update_hz_));
-            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_, 
-                                        (yaw_cmd - node_i.cam_rpy(2))*gimbal_update_hz_));
-            node_i.cam_rpy(1) = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1)*1.0/gimbal_update_hz_;
-            node_i.cam_rpy(2) = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2)*1.0/gimbal_update_hz_;
-
-        }        
-        if (node_i.gimbal_cmd(0)<-1e-7) //rate control mode
-        {   
+            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_,
+                                                                (pitch_cmd - node_i.cam_rpy(1)) * gimbal_update_hz_));
+            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_,
+                                                                (yaw_cmd - node_i.cam_rpy(2)) * gimbal_update_hz_));
+            node_i.cam_rpy(1) = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1) * 1.0 / gimbal_update_hz_;
+            node_i.cam_rpy(2) = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2) * 1.0 / gimbal_update_hz_;
+        }
+        if (node_i.gimbal_cmd(0) < -1e-7) // rate control mode
+        {
             node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(4)));
-            double pitch = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1)*1.0/gimbal_update_hz_;
+            double pitch = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1) * 1.0 / gimbal_update_hz_;
             node_i.cam_rpy(1) = max(-gimbal_pitch_max_, min(gimbal_pitch_max_, pitch));
 
             node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(5)));
-            double yaw = node_i.cam_rpy(2) +  node_i.cam_rpy_rate(2)*1.0/gimbal_update_hz_;
+            double yaw = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2) * 1.0 / gimbal_update_hz_;
             node_i.cam_rpy(2) = max(-gimbal_yaw_max_, min(gimbal_yaw_max_, yaw));
         }
-        
     }
 
     void GazeboPPComPlugin::readPCloud(std::string filename)
     {
-        pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZINormal>);
+        CloudXYZINPtr cloud(new CloudXYZIN);
         cloud_ = cloud;
-        if (pcl::io::loadPCDFile<pcl::PointXYZINormal>(filename, *cloud_) == -1) // load point cloud file
+        if (pcl::io::loadPCDFile<PointXYZIN>(filename, *cloud_) == -1) // load point cloud file
         {
             PCL_ERROR("Could not read the file");
             return;
         }
+
+        // Add the point index into the curvature field
+        #pragma omp parallel for num_threads(MAX_THREADS)
+        for(int i = 0; i < cloud->size(); i++)
+            cloud_->points[i].curvature = i;
+
         std::cout << "Loaded" << cloud_->width * cloud_->height
                   << "data points with the following fields: "
                   << std::endl;
@@ -670,6 +710,7 @@ namespace gazebo
         //               << " "    << cloud_->points[i].normal_x
         //               << " "    << cloud_->points[i].normal_y
         //               << " "    << cloud_->points[i].normal_z << std::endl;
+
         kdTreeInterestPts_.setInputCloud(cloud_);
     }
 
@@ -696,17 +737,17 @@ namespace gazebo
         Pj.back().z() = max(0.1, Pj.back().z());
 
         // Ray tracing from the slf node to each of the nbr node
-        double rtDist;           // Raytracing distance
-        double ppDist = 0;       // Peer to peer distance
-        string entity_name;      // Name of intersected object
+        double rtDist;      // Raytracing distance
+        double ppDist = 0;  // Peer to peer distance
+        string entity_name; // Name of intersected object
         ignition::math::Vector3d start_point;
         ignition::math::Vector3d end_point;
         bool los = false;
-        for(Vector3d &pa : Pi)
+        for (Vector3d &pa : Pi)
         {
             start_point = ignition::math::Vector3d(pa.x(), pa.y(), pa.z());
 
-            for(Vector3d &pb : Pj)
+            for (Vector3d &pb : Pj)
             {
                 end_point = ignition::math::Vector3d(pb.x(), pb.y(), pb.z());
 
@@ -716,7 +757,6 @@ namespace gazebo
                 ppDist = (pa - pb).norm();
                 if (entity_name == "" || (rtDist >= ppDist - 0.1))
                     return true;
-
             }
         }
         return los;
