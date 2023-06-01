@@ -102,7 +102,7 @@ struct PPComNode
     ros::Subscriber odom_sub;
     ros::Subscriber gimbal_sub;
     
-    // Subsribed odometry subscriber
+    // Publisher for topology and camera vizualization
     ros::Publisher topo_pub;
     ros::Publisher camera_pyramid_pub;
     
