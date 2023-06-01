@@ -738,6 +738,12 @@ namespace gazebo
                 }
             }
 
+            static ros::Publisher score_at_point_pub = ros_node_handle_->advertise<visualization_msgs::MarkerArray>("/score_at_point_txt", 10);
+            static ros::Publisher score_total_pub = ros_node_handle_->advertise<visualization_msgs::Marker>("/score_total_txt", 10);
+            static ros::Publisher score_pub = ros_node_handle_->advertise<sensor_msgs::PointCloud>("/" + node_i.name + "/score", 10);
+
+            visualization_msgs::MarkerArray score_at_point_all;
+
             sensor_msgs::PointCloud DetectedIP;
             DetectedIP.header.stamp = ros::Time::now();
             DetectedIP.header.frame_id = "world";
@@ -765,6 +771,30 @@ namespace gazebo
                     DetectedIP.channels[1].values.push_back(itr->second.scored_point.normal_y);
                     DetectedIP.channels[2].values.push_back(itr->second.scored_point.normal_z);
                     DetectedIP.channels[3].values.push_back(itr->second.scored_point.intensity);
+
+                    visualization_msgs::Marker score_atpoint;
+                    score_atpoint.header.frame_id = "world";
+                    score_atpoint.header.stamp = ros::Time::now();
+                    score_atpoint.ns = node_i.name;
+                    score_atpoint.id = total_detected;
+                    score_atpoint.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+                    score_atpoint.action = visualization_msgs::Marker::ADD;
+                    score_atpoint.pose.position.x = detected_point.x;
+                    score_atpoint.pose.position.y = detected_point.y;
+                    score_atpoint.pose.position.z = detected_point.z + 0.5;
+                    score_atpoint.pose.orientation.x = 0.0;
+                    score_atpoint.pose.orientation.y = 0.0;
+                    score_atpoint.pose.orientation.z = 0.0;
+                    score_atpoint.pose.orientation.w = 1.0;
+                    score_atpoint.scale.x = 1.0;
+                    score_atpoint.scale.y = 1.0;
+                    score_atpoint.scale.z = 0.5;
+                    score_atpoint.color.r = 0.0;
+                    score_atpoint.color.g = 1.0;
+                    score_atpoint.color.b = 0.0;
+                    score_atpoint.color.a = 1.0;
+                    score_atpoint.text = std::to_string(itr->second.scored_point.intensity);
+                    score_at_point_all.markers.push_back(score_atpoint);
                 }
             }
             string report = myprintf("Detected: %4d / %4d. Score: %6.3f\n",
@@ -794,10 +824,8 @@ namespace gazebo
             marker.color.a = 1.0;
             marker.text = report;
 
-            static ros::Publisher score_viz_pub = ros_node_handle_->advertise<visualization_msgs::Marker>("/" + node_i.name + "/score_text", 10);
-            score_viz_pub.publish(marker);
-
-            static ros::Publisher score_pub = ros_node_handle_->advertise<sensor_msgs::PointCloud>("/" + node_i.name + "/score", 10);
+            score_at_point_pub.publish(score_at_point_all);
+            score_total_pub.publish(marker);
             score_pub.publish(DetectedIP);
         }
     }
