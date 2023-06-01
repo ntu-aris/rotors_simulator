@@ -22,20 +22,17 @@
 <robot name="caric_gcs" xmlns:xacro="http://ros.org/wiki/xacro">
 
   <!-- Properties -->
-  <xacro:property name="namespace"     value="$(arg namespace)" />
-  <xacro:property name="ppcom_id"      value="$(arg ppcom_id)" />
-  <xacro:property name="ppcom_config"  value="$(arg ppcom_config)" />
-  <xacro:property name="ppcom_hz"      value="$(arg ppcom_hz)" />
+  <xacro:property name="namespace"        value="$(arg namespace)" />
+  <xacro:property name="ppcom_id"         value="$(arg ppcom_id)" />
+  <xacro:property name="ppcom_config"     value="$(arg ppcom_config)" />
+  <xacro:property name="ppcom_hz"         value="$(arg ppcom_hz)" />
   <xacro:property name="interest_config"  value="$(arg interest_config)" />
-  <xacro:property name="cam_x"      value="$(arg cam_x)" />
-  <xacro:property name="cam_y"      value="$(arg cam_y)" />
-  <xacro:property name="cam_z"      value="$(arg cam_z)" />
 
-  <xacro:property name="use_mesh_file" value="true" />
-  <xacro:property name="mesh_file"     value="package://rotors_description/meshes/gcs/gcs.dae" />
-  <xacro:property name="mass"          value="1.5" /> <!-- [kg] -->
-  <xacro:property name="body_width"    value="0.1" /> <!-- [m] -->
-  <xacro:property name="body_height"   value="0.16" /> <!-- [m] -->
+  <xacro:property name="use_mesh_file"    value="true" />
+  <xacro:property name="mesh_file"        value="package://rotors_description/meshes/gcs/gcs.dae" />
+  <xacro:property name="mass"             value="1.5" /> <!-- [kg] -->
+  <xacro:property name="body_width"       value="0.1" /> <!-- [m] -->
+  <xacro:property name="body_height"      value="0.16" /> <!-- [m] -->
 
   <!-- Property Blocks -->
   <xacro:property name="body_inertia">

@@ -737,7 +737,7 @@ namespace gazebo
                 }
             }
 
-            double total_detected = 0;
+            int total_detected = 0;
             double total_score = 0;
             for(map< int, IndexedInterestPoint >::iterator itr = node_i_iplog.begin(); itr != node_i_iplog.end(); itr++)
             {
@@ -746,7 +746,34 @@ namespace gazebo
 
                 total_score += itr->second.scored_point.intensity;
             }
-            printf("Total detected: %5f. Score: %6.3f\n", total_detected, total_score);
+            string report = myprintf("Detected: %4d / %4d. Score: %6.3f\n",
+                                     total_detected, node_i_iplog.size(), total_score);
+
+            visualization_msgs::Marker marker;
+            marker.header.frame_id = "score_report";
+            marker.header.stamp = ros::Time::now();
+            marker.ns = node_i.name;
+            marker.id = 0;
+            marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.pose.position.x = node_i.odom_msg.pose.pose.position.x;
+            marker.pose.position.y = node_i.odom_msg.pose.pose.position.y;
+            marker.pose.position.z = node_i.odom_msg.pose.pose.position.z;
+            marker.pose.orientation.x = 0.0;
+            marker.pose.orientation.y = 0.0;
+            marker.pose.orientation.z = 0.0;
+            marker.pose.orientation.w = 1.0;
+            marker.scale.x = 1.0;
+            marker.scale.y = 1.0;
+            marker.scale.z = 2.5;
+            marker.color.r = 0.0;
+            marker.color.g = 1.0;
+            marker.color.b = 0.0;
+            marker.color.a = 1.0;
+            marker.text = report;
+
+            static ros::Publisher score_pub = ros_node_handle_->advertise<visualization_msgs::Marker>("/" + node_i.name + "/score", 10);
+            score_pub.publish(marker);
         }
     }
     
