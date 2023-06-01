@@ -247,7 +247,8 @@ namespace gazebo
             node.odom_sub = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + node.name + "/ground_truth/odometry", 1,
                                                                             boost::bind(&GazeboPPComPlugin::OdomCallback, this, _1, node_idx));
             // Publisher for the topology
-            node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
+            if (node.role == "manager")
+                node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
 
             // Publisher for camera pyramid visuals
             node.camera_pyramid_pub = ros_node_handle_->advertise<visualization_msgs::Marker>(
@@ -704,7 +705,7 @@ namespace gazebo
             PPComNode &node_i = ppcom_nodes_[i];
             std::map<int, IndexedInterestPoint> &node_i_iplog = node_i.InPoLog;
 
-            // GCS no need to check detection
+            // Only job of the GCS
             if (node_i.name != "gcs")
                 continue;
             
@@ -737,18 +738,69 @@ namespace gazebo
                 }
             }
 
+            static ros::Publisher score_at_point_pub = ros_node_handle_->advertise<visualization_msgs::MarkerArray>("/score_at_point_txt", 10);
+            static ros::Publisher score_total_pub = ros_node_handle_->advertise<visualization_msgs::Marker>("/score_total_txt", 10);
+            static ros::Publisher score_pub = ros_node_handle_->advertise<sensor_msgs::PointCloud>("/" + node_i.name + "/score", 10);
+
+            visualization_msgs::MarkerArray score_at_point_all;
+
+            sensor_msgs::PointCloud DetectedIP;
+            DetectedIP.header.stamp = ros::Time::now();
+            DetectedIP.header.frame_id = "world";
+            sensor_msgs::ChannelFloat32 normal_x; normal_x.name = "normal_x"; DetectedIP.channels.push_back(normal_x);
+            sensor_msgs::ChannelFloat32 normal_y; normal_y.name = "normal_y"; DetectedIP.channels.push_back(normal_y);
+            sensor_msgs::ChannelFloat32 normal_z; normal_z.name = "normal_z"; DetectedIP.channels.push_back(normal_z);
+            sensor_msgs::ChannelFloat32 score; score.name = "score"; DetectedIP.channels.push_back(score);
+
             int total_detected = 0;
             double total_score = 0;
             for(map< int, IndexedInterestPoint >::iterator itr = node_i_iplog.begin(); itr != node_i_iplog.end(); itr++)
             {
                 if (itr->second.scored_point.intensity > 0.0)
+                {
                     total_detected++;
+                    total_score += itr->second.scored_point.intensity;
 
-                total_score += itr->second.scored_point.intensity;
+                    geometry_msgs::Point32 detected_point;
+                    detected_point.x = itr->second.scored_point.x;
+                    detected_point.y = itr->second.scored_point.y;
+                    detected_point.z = itr->second.scored_point.z;
+
+                    DetectedIP.points.push_back(detected_point);
+                    DetectedIP.channels[0].values.push_back(itr->second.scored_point.normal_x);
+                    DetectedIP.channels[1].values.push_back(itr->second.scored_point.normal_y);
+                    DetectedIP.channels[2].values.push_back(itr->second.scored_point.normal_z);
+                    DetectedIP.channels[3].values.push_back(itr->second.scored_point.intensity);
+
+                    visualization_msgs::Marker score_atpoint;
+                    score_atpoint.header.frame_id = "world";
+                    score_atpoint.header.stamp = ros::Time::now();
+                    score_atpoint.ns = node_i.name;
+                    score_atpoint.id = total_detected;
+                    score_atpoint.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+                    score_atpoint.action = visualization_msgs::Marker::ADD;
+                    score_atpoint.pose.position.x = detected_point.x;
+                    score_atpoint.pose.position.y = detected_point.y;
+                    score_atpoint.pose.position.z = detected_point.z + 0.5;
+                    score_atpoint.pose.orientation.x = 0.0;
+                    score_atpoint.pose.orientation.y = 0.0;
+                    score_atpoint.pose.orientation.z = 0.0;
+                    score_atpoint.pose.orientation.w = 1.0;
+                    score_atpoint.scale.x = 1.0;
+                    score_atpoint.scale.y = 1.0;
+                    score_atpoint.scale.z = 0.5;
+                    score_atpoint.color.r = 0.0;
+                    score_atpoint.color.g = 1.0;
+                    score_atpoint.color.b = 0.0;
+                    score_atpoint.color.a = 1.0;
+                    score_atpoint.text = std::to_string(itr->second.scored_point.intensity);
+                    score_at_point_all.markers.push_back(score_atpoint);
+                }
             }
             string report = myprintf("Detected: %4d / %4d. Score: %6.3f\n",
                                      total_detected, node_i_iplog.size(), total_score);
 
+            // Visualize the score on rviz
             visualization_msgs::Marker marker;
             marker.header.frame_id = "score_report";
             marker.header.stamp = ros::Time::now();
@@ -772,8 +824,9 @@ namespace gazebo
             marker.color.a = 1.0;
             marker.text = report;
 
-            static ros::Publisher score_pub = ros_node_handle_->advertise<visualization_msgs::Marker>("/" + node_i.name + "/score", 10);
-            score_pub.publish(marker);
+            score_at_point_pub.publish(score_at_point_all);
+            score_total_pub.publish(marker);
+            score_pub.publish(DetectedIP);
         }
     }
     
