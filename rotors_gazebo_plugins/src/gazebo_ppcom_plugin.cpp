@@ -739,6 +739,8 @@ namespace gazebo
             }
 
             sensor_msgs::PointCloud DetectedIP;
+            DetectedIP.header.stamp = ros::Time::now();
+            DetectedIP.header.frame_id = "world";
             sensor_msgs::ChannelFloat32 normal_x; normal_x.name = "normal_x"; DetectedIP.channels.push_back(normal_x);
             sensor_msgs::ChannelFloat32 normal_y; normal_y.name = "normal_y"; DetectedIP.channels.push_back(normal_y);
             sensor_msgs::ChannelFloat32 normal_z; normal_z.name = "normal_z"; DetectedIP.channels.push_back(normal_z);
