@@ -38,7 +38,8 @@
 // #include <ros/callback_queue.h>
 // #include <tf/transform_broadcaster.h>
 #include <nav_msgs/Odometry.h>
-#include "geometry_msgs/Twist.h"
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/TwistStamped.h>
 
 // #include "Imu.pb.h"
 
@@ -105,6 +106,7 @@ struct PPComNode
     // Publisher for topology and camera vizualization
     ros::Publisher topo_pub;
     ros::Publisher camera_pyramid_pub;
+    ros::Publisher gimbal_pub;
     
     // Timer on the update
     ros::Timer timer_update;

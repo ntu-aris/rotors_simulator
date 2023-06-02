@@ -292,7 +292,7 @@ namespace gazebo
 
             node.gimbal_sub = ros_node_handle_->subscribe<geometry_msgs::Twist>("/" + node.name + "/command/gimbal", 1,
                                                                                 boost::bind(&GazeboPPComPlugin::GimbalCallback, this, _1, node_idx));
-
+            node.gimbal_pub = ros_node_handle_->advertise<geometry_msgs::TwistStamped>("/" + node.name + "/gimbal", 1);
             node.gimbal_cmd = Eigen::VectorXd(6);
             node.gimbal_cmd.setZero();
             node.gimbal_cmd_last_update = ros::Time::now();
@@ -867,6 +867,16 @@ namespace gazebo
             double yaw = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2) * 1.0 / gimbal_update_hz_;
             node_i.cam_rpy(2) = max(-gimbal_yaw_max_, min(gimbal_yaw_max_, yaw));
         }
+        geometry_msgs::TwistStamped gimbal_state;
+        gimbal_state.header.stamp = ros::Time::now();
+        gimbal_state.header.frame_id = "gimbal";
+        gimbal_state.twist.linear.x = 0.0;
+        gimbal_state.twist.linear.y = node_i.cam_rpy(1);
+        gimbal_state.twist.linear.z = node_i.cam_rpy(2);
+        gimbal_state.twist.angular.x = 0.0;
+        gimbal_state.twist.angular.y = node_i.cam_rpy_rate(1);
+        gimbal_state.twist.angular.z = node_i.cam_rpy_rate(2);
+        node_i.gimbal_pub.publish(gimbal_state);
     }
 
     void GazeboPPComPlugin::readPCloud(std::string filename)
