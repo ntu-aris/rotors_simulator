@@ -96,6 +96,8 @@
 // Ceres
 // #include <ceres/ceres.h>
 
+#include "gazebo/common/Time.hh"
+
 using namespace std;
 using namespace Eigen;
 
@@ -538,22 +540,22 @@ struct myTf
 
 typedef myTf<> mytf;
 
-CloudXYZI toCloudXYZI(CloudXYZIT &inCloud)
-{
-    int cloudSize = inCloud.size();
-    CloudXYZI outCloud; outCloud.resize(cloudSize);
+// CloudXYZI toCloudXYZI(CloudXYZIT &inCloud)
+// {
+//     int cloudSize = inCloud.size();
+//     CloudXYZI outCloud; outCloud.resize(cloudSize);
     
-    #pragma omp parallel for num_threads(omp_get_max_threads())
-    for(int i = 0; i < cloudSize; i++)
-    {
-        outCloud.points[i].x = inCloud.points[i].x;
-        outCloud.points[i].y = inCloud.points[i].y;
-        outCloud.points[i].z = inCloud.points[i].z;
-        outCloud.points[i].intensity = inCloud.points[i].intensity;
-    }
+//     #pragma omp parallel for num_threads(omp_get_max_threads())
+//     for(int i = 0; i < cloudSize; i++)
+//     {
+//         outCloud.points[i].x = inCloud.points[i].x;
+//         outCloud.points[i].y = inCloud.points[i].y;
+//         outCloud.points[i].z = inCloud.points[i].z;
+//         outCloud.points[i].intensity = inCloud.points[i].intensity;
+//     }
 
-    return outCloud;
-}
+//     return outCloud;
+// }
 
 namespace Util
 {
@@ -983,6 +985,13 @@ namespace Util
         result.push_back(s);
 
         return result;
+    }
+
+    // Gazebo time to ros time
+    void GazeboTimeToRosTime(gazebo::common::Time gzTime, ros::Time &rosTime)
+    {
+        rosTime.sec = gzTime.sec;
+        rosTime.nsec = gzTime.nsec;
     }
 
 }; // namespace Util

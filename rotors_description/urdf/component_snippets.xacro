@@ -1037,7 +1037,7 @@
         <!-- Mount a generic odometry sensor providing ground truth. -->
         <xacro:odometry_plugin_macro
             namespace="${namespace}"
-            odometry_sensor_suffix="gt"
+            odometry_sensor_suffix=""
             parent_link="${parent_link}"
             pose_topic="ground_truth/pose"
             pose_with_covariance_topic="ground_truth/pose_with_covariance"

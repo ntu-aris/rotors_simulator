@@ -398,7 +398,7 @@ namespace gazebo
             // Publish the information of the topology
             rotors_comm::PPComTopology topo_msg;
             topo_msg.header.frame_id = "world";
-            topo_msg.header.stamp = ros::Time::now();
+            Util::GazeboTimeToRosTime(world_->SimTime(), topo_msg.header.stamp);
 
             topo_msg.node_id.clear();
             for (PPComNode &node : ppcom_nodes_)
@@ -474,7 +474,7 @@ namespace gazebo
                 m.scale.x = 0.15;
                 m.scale.y = 0.0001;
                 m.scale.z = 0.0001;
-                m.header.stamp = ros::Time::now();
+                Util::GazeboTimeToRosTime(world_->SimTime(), m.header.stamp);
                 m.header.frame_id = "world";
                 node_i.camera_pyramid_pub.publish(m);
 
@@ -745,7 +745,7 @@ namespace gazebo
             visualization_msgs::MarkerArray score_at_point_all;
 
             sensor_msgs::PointCloud DetectedIP;
-            DetectedIP.header.stamp = ros::Time::now();
+            Util::GazeboTimeToRosTime(world_->SimTime(), DetectedIP.header.stamp);
             DetectedIP.header.frame_id = "world";
             sensor_msgs::ChannelFloat32 normal_x; normal_x.name = "normal_x"; DetectedIP.channels.push_back(normal_x);
             sensor_msgs::ChannelFloat32 normal_y; normal_y.name = "normal_y"; DetectedIP.channels.push_back(normal_y);
@@ -774,7 +774,7 @@ namespace gazebo
 
                     visualization_msgs::Marker score_atpoint;
                     score_atpoint.header.frame_id = "world";
-                    score_atpoint.header.stamp = ros::Time::now();
+                    Util::GazeboTimeToRosTime(world_->SimTime(), score_atpoint.header.stamp);
                     score_atpoint.ns = node_i.name;
                     score_atpoint.id = total_detected;
                     score_atpoint.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
@@ -803,7 +803,7 @@ namespace gazebo
             // Visualize the score on rviz
             visualization_msgs::Marker marker;
             marker.header.frame_id = "score_report";
-            marker.header.stamp = ros::Time::now();
+            Util::GazeboTimeToRosTime(world_->SimTime(), marker.header.stamp);
             marker.ns = node_i.name;
             marker.id = 0;
             marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;

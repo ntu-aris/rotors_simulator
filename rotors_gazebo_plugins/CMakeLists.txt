@@ -449,6 +449,14 @@ if (NOT NO_ROS)
   list(APPEND targets_to_install rotors_gazebo_motor_model)
 endif()
 
+#==================================== SERVO MODEL PLUGIN ========================================//
+if (NOT NO_ROS)
+  add_library(rotors_gazebo_servo_model SHARED src/gazebo_servo_model.cpp)
+  target_link_libraries(rotors_gazebo_servo_model ${target_linking_LIBRARIES} )
+  add_dependencies(rotors_gazebo_servo_model ${catkin_EXPORTED_TARGETS})
+  list(APPEND targets_to_install rotors_gazebo_servo_model)
+endif()
+
 #==================================== MULTIROTOR BASE PLUGIN ====================================//
 if (NOT NO_ROS)
   add_library(rotors_gazebo_multirotor_base_plugin SHARED src/gazebo_multirotor_base_plugin.cpp)
@@ -540,14 +548,6 @@ if (NOT NO_ROS)
   add_dependencies(rotors_gazebo_ppcom_plugin ${catkin_EXPORTED_TARGETS})
   list(APPEND targets_to_install rotors_gazebo_ppcom_plugin)
 endif()
-
-# #========================================= CARIC PLUGIN =========================================//
-# if (NOT NO_ROS)
-#   add_library(rotors_gazebo_caric_plugin SHARED src/gazebo_caric_plugin.cpp)
-#   target_link_libraries(rotors_gazebo_caric_plugin ${target_linking_LIBRARIES} )
-#   add_dependencies(rotors_gazebo_caric_plugin ${catkin_EXPORTED_TARGETS})
-#   list(APPEND targets_to_install rotors_gazebo_caric_plugin)
-# endif()
 
 # =============================================================================================== #
 # ======================================= EXTERNAL LIBRARIES ==================================== #
