@@ -75,14 +75,14 @@ void Joy::TimerCallback(const ros::TimerEvent &)
 {
   if (!got_joy_) return;
 
-  if ((ros::Time::now()-time_joy).toSec()>1.0)
+  if ((ros::Time::now()-time_joy).toSec()>0.5)
   {
     yaw_cmd = tf_uav.yaw();
     xyz_cmd_world = Eigen::Vector3d(0.0, 0.0, 0.0);
     vertical_speed = 0.0;
   }
 
-  Eigen::Quaterniond q = Util::YPR2Quat(yaw_cmd, 0.0, 0.0);
+  // Eigen::Quaterniond q = Util::YPR2Quat(yaw_cmd, 0.0, 0.0);
   trajectory_msgs::MultiDOFJointTrajectory trajset_msg;
   trajset_msg.header.stamp = ros::Time::now();
   trajset_msg.header.frame_id = "world";
@@ -92,10 +92,10 @@ void Joy::TimerCallback(const ros::TimerEvent &)
   transform_msg.translation.x = tf_uav.pos(0);
   transform_msg.translation.y = tf_uav.pos(1);
   transform_msg.translation.z = tf_uav.pos(2);
-  transform_msg.rotation.x = q.x();
-  transform_msg.rotation.y = q.y();
-  transform_msg.rotation.z = q.z();
-  transform_msg.rotation.w = q.w();
+  transform_msg.rotation.x = 0.0;
+  transform_msg.rotation.y = 0.0;
+  transform_msg.rotation.z = sinf(yaw_cmd/180.0*M_PI*0.5);
+  transform_msg.rotation.w = cosf(yaw_cmd/180.0*M_PI*0.5);
   trajpt_msg.transforms.push_back(transform_msg);
   vel_msg.linear.x = xyz_cmd_world(0);
   vel_msg.linear.y = xyz_cmd_world(1);
