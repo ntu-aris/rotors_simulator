@@ -530,15 +530,35 @@ namespace gazebo
                         // Temporary point to be evaluated for actual detection
                         PointXYZIN detected_point = kpoint; detected_point.intensity = 0;
 
-                        Vector3d rpy_rate = Vector3d(0.0, node_i.cam_rpy_rate(1), node_i.cam_rpy_rate(2) + node_i.odom_msg.twist.twist.angular.z);
-                        Vector3d v_point_in_cam = -Util::skewSymmetric(rpy_rate) * InPoint_cam -
-                                                   tf_cam.rot.inverse() * v_cam_world;
+                        MatrixXd R_dot_cam(3,3);
+                        R_dot_cam << -node_i.cam_rpy_rate(2)*sin(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1))-
+                                      node_i.cam_rpy_rate(1)*cos(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1)),
+                                     -node_i.cam_rpy_rate(2)*cos(node_i.cam_rpy(2)), 
+                                     -node_i.cam_rpy_rate(2)*sin(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1))+
+                                      node_i.cam_rpy_rate(1)*cos(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1)),
+                                      node_i.cam_rpy_rate(2)*cos(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1))-
+                                      node_i.cam_rpy_rate(1)*sin(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1)), 
+                                     -node_i.cam_rpy_rate(2)*sin(node_i.cam_rpy(2)),
+                                      node_i.cam_rpy_rate(2)*cos(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1))+
+                                      node_i.cam_rpy_rate(1)*sin(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1)),
+                                     -node_i.cam_rpy_rate(1)*cos(node_i.cam_rpy(1)), 0.0, 
+                                     -node_i.cam_rpy_rate(1)*sin(node_i.cam_rpy(1));
+                        //in Z-Y-X rotation sequence, the euler yaw rate is ang vel z
+                        Vector3d angvel_virtual_frame(0.0, 0.0, node_i.odom_msg.twist.twist.angular.z); 
+                        MatrixXd angvel_cam_skew = Util::skewSymmetric(angvel_virtual_frame) + 
+                                                    Util::YPR2Rot(tf_uav.yaw(), 0.0, 0.0) * R_dot_cam * tf_cam.rot.inverse();
+                        if (fabs(angvel_cam_skew(0,1)+angvel_cam_skew(1,0))>0.05)
+                            ROS_INFO("NOT RIGHT! angvel_cam_skew not skew-symmetric!!");
+
+                        Vector3d v_point_in_cam = -tf_cam.rot.inverse().normalized().toRotationMatrix() * 
+                                                  (angvel_cam_skew * (InPoint_world  - p_cam_world) +  v_cam_world);
+                        Vector3d InPoint_cam_moved = InPoint_cam + v_point_in_cam * node_i.exposure;
                         // horizontal camera pixels
-                        double pixel_move_v = node_i.focal_length / InPoint_cam(0) * v_point_in_cam(1) *
-                                              node_i.exposure / node_i.pixel_size;
+                        double pixel_move_v = node_i.focal_length * fabs(InPoint_cam(1) / InPoint_cam(0) -
+                                              InPoint_cam_moved(1) / InPoint_cam_moved(0)) / node_i.pixel_size;
                         // vertical camera pixels
-                        double pixel_move_u = node_i.focal_length / InPoint_cam(0) * v_point_in_cam(2) *
-                                              node_i.exposure / node_i.pixel_size;
+                        double pixel_move_u = node_i.focal_length * fabs(InPoint_cam(2) / InPoint_cam(0) -
+                                              InPoint_cam_moved(2) / InPoint_cam_moved(0)) / node_i.pixel_size;
 
                         double score1 = 1.0 - min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
 
