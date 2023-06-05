@@ -80,6 +80,7 @@ void Joy::TimerCallback(const ros::TimerEvent &)
     yaw_cmd = tf_uav.yaw();
     xyz_cmd_world = Eigen::Vector3d(0.0, 0.0, 0.0);
     vertical_speed = 0.0;
+    return;
   }
 
   // Eigen::Quaterniond q = Util::YPR2Quat(yaw_cmd, 0.0, 0.0);
@@ -89,9 +90,9 @@ void Joy::TimerCallback(const ros::TimerEvent &)
   trajectory_msgs::MultiDOFJointTrajectoryPoint trajpt_msg;
   geometry_msgs::Transform transform_msg;
   geometry_msgs::Twist accel_msg, vel_msg;
-  transform_msg.translation.x = tf_uav.pos(0);
-  transform_msg.translation.y = tf_uav.pos(1);
-  transform_msg.translation.z = tf_uav.pos(2);
+  transform_msg.translation.x = 0.0;
+  transform_msg.translation.y = 0.0;
+  transform_msg.translation.z = 0.0;
   transform_msg.rotation.x = 0.0;
   transform_msg.rotation.y = 0.0;
   transform_msg.rotation.z = sinf(yaw_cmd/180.0*M_PI*0.5);
