@@ -489,7 +489,7 @@ namespace gazebo
                 pos_cam.y = p_cam_world(1);
                 pos_cam.z = p_cam_world(2);
                 // node_i.cam_ypr = Vector3d(0.0, node_i., tf_uav.yaw());
-                Vector3d ypr(tf_uav.yaw() + node_i.cam_rpy(2) / M_PI * 180.0, node_i.cam_rpy(1) / M_PI * 180.0, 0.0);
+                Vector3d ypr(tf_uav.yaw() + node_i. cam_rpy(2) / M_PI * 180.0, node_i.cam_rpy(1) / M_PI * 180.0, 0.0);
                 myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);
 
                 std::vector<int> k_idx; std::vector<float> k_distances;

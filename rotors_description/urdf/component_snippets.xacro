@@ -858,7 +858,7 @@
     <!-- Macro to add a PPCom sensor. -->
     <xacro:macro name="ppcom_plugin_macro"
         params="namespace parent_link mass
-                ppcom_suffix ppcom_id ppcom_config ppcom_topic ppcom_hz interest_config
+                ppcom_suffix ppcom_id ppcom_config ppcom_topic ppcom_hz interest_points
                 *inertia *origin">
         <!-- IMU link -->
         <link name="${namespace}/ppcom${ppcom_suffix}_link">
@@ -898,7 +898,7 @@
 
                 <!-- (double): Update period of the ppcom -->
                 <ppcomHz>${ppcom_hz}</ppcomHz>
-                <interestPcd>${interest_config}</interestPcd>
+                <interestPcd>${interest_points}</interestPcd>
 
             </plugin>
         </gazebo>
@@ -966,7 +966,7 @@
     <!-- Macro to add a caric sensor. -->
     <xacro:macro name="caric_plugin_macro"
         params="namespace parent_link mass
-                ppcom_config interest_config ppcom_topic ppcom_hz
+                ppcom_config interest_points ppcom_topic ppcom_hz
                 cam_x cam_y cam_z
                 *inertia *origin">
         <!-- IMU link -->
@@ -1005,7 +1005,7 @@
                 <!-- (double): Update period of the ppcom -->
                 <ppcomHz>${ppcom_hz}</ppcomHz>
 
-                <interestPcd>${interest_config}</interestPcd>
+                <interestPcd>${interest_points}</interestPcd>
                 
                 <cam_x>${cam_x}</cam_x>
                 <cam_y>${cam_y}</cam_y>
