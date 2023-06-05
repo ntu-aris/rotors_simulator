@@ -133,10 +133,15 @@ endif()
 message(STATUS "CMAKE_BINARY_DIR = ${CMAKE_BINARY_DIR}" )
 
 find_package(Eigen REQUIRED)
-# find_package(gazebo_dev QUIET PATHS /usr/include/gazebo-11)
-if (NOT GAZEBO_DEV_FOUND)
-  find_package(gazebo REQUIRED)
+
+if("$ENV{ROS_DISTRO}" STREQUAL "melodic")
+  find_package(gazebo QUIET PATHS /usr/include/gazebo-11)
+else()
+  if (NOT GAZEBO_DEV_FOUND)
+    find_package(gazebo REQUIRED)
+  endif()
 endif()
+
 
 if(${gazebo_VERSION_MAJOR} LESS 9)
   if(${gazebo_VERSION_MAJOR} LESS 7)
