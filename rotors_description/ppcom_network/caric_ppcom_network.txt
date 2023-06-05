@@ -1,7 +1,7 @@
-# Name      Role      AntOffset     HorzFOV      VertFOV    CamPosX    CamPosY    CamPosZ    ExposureTime
-gcs,        manager,  0.1,          90,          60,        0.2,       0.0,       -0.3,      0.01
-firefly1,   peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.01
-firefly2,   peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.01
-firefly3,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.01
-firefly4,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.01
-firefly5,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.01
+# Name     Role      AntOffset     HorzFOV      VertFOV    CamPosX    CamPosY    CamPosZ    ExposureTime   TriggerInterval
+gcs,       manager,  0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
+jurong,    peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
+raffles,   peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
+sentosa,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
+changi,    peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
+nanyang,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
