@@ -111,7 +111,7 @@ namespace gazebo
 
         // Publish the pose
         static nav_msgs::Odometry servo_odom;
-        Util::GazeboTimeToRosTime(world_->SimTime(), servo_odom.header.stamp);
+        servo_odom.header.stamp = Util::GazeboTimeToRosTime(world_->SimTime());
         servo_odom.header.frame_id = "world";
 
         servo_odom.pose.pose.position.x = linkPose.X();

@@ -416,7 +416,7 @@ namespace gazebo
             // Publish the information of the topology
             rotors_comm::PPComTopology topo_msg;
             topo_msg.header.frame_id = "world";
-            Util::GazeboTimeToRosTime(world_->SimTime(), topo_msg.header.stamp);
+            topo_msg.header.stamp = Util::GazeboTimeToRosTime(world_->SimTime());
 
             topo_msg.node_id.clear();
             for (PPComNode &node : ppcom_nodes_)
@@ -492,7 +492,7 @@ namespace gazebo
                 m.scale.x = 0.15;
                 m.scale.y = 0.0001;
                 m.scale.z = 0.0001;
-                Util::GazeboTimeToRosTime(world_->SimTime(), m.header.stamp);
+                m.header.stamp = Util::GazeboTimeToRosTime(world_->SimTime());
                 m.header.frame_id = "world";
                 node_i.camera_pyramid_pub.publish(m);
 
@@ -815,18 +815,24 @@ namespace gazebo
             }
 
             static ros::Publisher score_at_point_pub = ros_node_handle_->advertise<visualization_msgs::MarkerArray>("/score_at_point_txt", 10);
-            static ros::Publisher score_total_pub = ros_node_handle_->advertise<visualization_msgs::Marker>("/score_total_txt", 10);
+            static ros::Publisher score_total_pub = ros_node_handle_->advertise<visualization_msgs::Marker>("/viz_score_totalled", 10);
             static ros::Publisher score_pub = ros_node_handle_->advertise<sensor_msgs::PointCloud>("/" + node_i.name + "/score", 10);
+            static ros::Publisher score_eval_pub = ros_node_handle_->advertise<sensor_msgs::PointCloud>("/score_eval", 10);
 
             visualization_msgs::MarkerArray score_at_point_all;
 
+            // Create a message to broadcast the detection info from gcs
             sensor_msgs::PointCloud DetectedIP;
-            Util::GazeboTimeToRosTime(world_->SimTime(), DetectedIP.header.stamp);
+            DetectedIP.header.stamp = Util::GazeboTimeToRosTime(world_->SimTime());
             DetectedIP.header.frame_id = "world";
             sensor_msgs::ChannelFloat32 normal_x; normal_x.name = "normal_x"; DetectedIP.channels.push_back(normal_x);
             sensor_msgs::ChannelFloat32 normal_y; normal_y.name = "normal_y"; DetectedIP.channels.push_back(normal_y);
             sensor_msgs::ChannelFloat32 normal_z; normal_z.name = "normal_z"; DetectedIP.channels.push_back(normal_z);
-            sensor_msgs::ChannelFloat32 score; score.name = "score"; DetectedIP.channels.push_back(score);
+            sensor_msgs::ChannelFloat32 score;    score.name    = "score";    DetectedIP.channels.push_back(score);
+
+            // Create a message for indexing
+            sensor_msgs::PointCloud DetectedIPEval = DetectedIP;
+            sensor_msgs::ChannelFloat32 global_index; global_index.name = "global_index"; DetectedIPEval.channels.push_back(global_index);
 
             int total_detected = 0;
             double total_score = 0;
@@ -848,9 +854,16 @@ namespace gazebo
                     DetectedIP.channels[2].values.push_back(itr->second.scored_point.normal_z);
                     DetectedIP.channels[3].values.push_back(itr->second.scored_point.intensity);
 
+                    DetectedIPEval.points.push_back(detected_point);
+                    DetectedIPEval.channels[0].values.push_back(itr->second.scored_point.normal_x);
+                    DetectedIPEval.channels[1].values.push_back(itr->second.scored_point.normal_y);
+                    DetectedIPEval.channels[2].values.push_back(itr->second.scored_point.normal_z);
+                    DetectedIPEval.channels[3].values.push_back(itr->second.scored_point.intensity);
+                    DetectedIPEval.channels[4].values.push_back(itr->second.scored_point.curvature);
+
                     visualization_msgs::Marker score_atpoint;
                     score_atpoint.header.frame_id = "world";
-                    Util::GazeboTimeToRosTime(world_->SimTime(), score_atpoint.header.stamp);
+                    score_atpoint.header.stamp = Util::GazeboTimeToRosTime(world_->SimTime());
                     score_atpoint.ns = node_i.name;
                     score_atpoint.id = total_detected;
                     score_atpoint.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
@@ -873,13 +886,13 @@ namespace gazebo
                     score_at_point_all.markers.push_back(score_atpoint);
                 }
             }
-            string report = myprintf("Detected: %4d / %4d. Score: %6.3f\n",
+            string report = myprintf("Detected: %4d / %4d. Score: %6.3f",
                                      total_detected, node_i_iplog.size(), total_score);
 
             // Visualize the score on rviz
             visualization_msgs::Marker marker;
             marker.header.frame_id = "score_report";
-            Util::GazeboTimeToRosTime(world_->SimTime(), marker.header.stamp);
+            marker.header.stamp = Util::GazeboTimeToRosTime(world_->SimTime());
             marker.ns = node_i.name;
             marker.id = 0;
             marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
@@ -903,6 +916,7 @@ namespace gazebo
             score_at_point_pub.publish(score_at_point_all);
             score_total_pub.publish(marker);
             score_pub.publish(DetectedIP);
+            score_eval_pub.publish(DetectedIPEval);
         }
     }
     

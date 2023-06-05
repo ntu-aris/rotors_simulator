@@ -988,10 +988,9 @@ namespace Util
     }
 
     // Gazebo time to ros time
-    void GazeboTimeToRosTime(gazebo::common::Time gzTime, ros::Time &rosTime)
+    ros::Time GazeboTimeToRosTime(gazebo::common::Time gzTime)
     {
-        rosTime.sec = gzTime.sec;
-        rosTime.nsec = gzTime.nsec;
+        return ros::Time(gzTime.sec, gzTime.nsec);
     }
 
 }; // namespace Util
