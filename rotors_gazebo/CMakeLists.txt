@@ -9,7 +9,12 @@ add_definitions(-std=c++11)
 
 # We need Gazebo version >= 3.0.0 to generate iris.sdf file
 # (gz sdf ... command needs to be available)
-find_package(gazebo REQUIRED)
+if("$ENV{ROS_DISTRO}" STREQUAL "melodic")
+  find_package(gazebo QUIET PATHS /usr/include/gazebo-11)
+else()
+  find_package(gazebo REQUIRED)
+endif()
+
 find_package(PythonInterp REQUIRED)
 
 if(${gazebo_VERSION_MAJOR} GREATER 2)
