@@ -52,6 +52,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 
 #include "utility.h"
+#include <rotors_comm/BoolStamped.h>
 
 using namespace std;
 
@@ -79,7 +80,8 @@ struct PPComNode
     PPComNode(const string &name_, const string &role_, const double &offset_);
     PPComNode(const string &name_, const string &role_, const double &offset_,
               const double &hfov, const double &vfov, const double &cam_x,
-              const double &cam_y, const double &cam_z);
+              const double &cam_y, const double &cam_z, const double &exposure,
+              const double &trig_interval);
    ~PPComNode();
 
     Eigen::MatrixXd GetTopology();
@@ -102,7 +104,8 @@ struct PPComNode
     // Subsribed odometry subscriber
     ros::Subscriber odom_sub;
     ros::Subscriber gimbal_sub;
-    
+    ros::Subscriber trigger_sub;
+
     // Publisher for topology and camera vizualization
     ros::Publisher topo_pub;
     ros::Publisher camera_pyramid_pub;
@@ -137,6 +140,18 @@ struct PPComNode
     double pixel_size = 4.35e-6; //in m
     Eigen::VectorXd gimbal_cmd;
     ros::Time gimbal_cmd_last_update;
+
+    std::deque<nav_msgs::Odometry> odom_deque;
+    std::deque<rotors_comm::BoolStamped> trigger_deque;
+    std::deque<Eigen::Vector3d> cam_rpy_deque;
+    std::deque<Eigen::Vector3d> cam_rpy_rate_deque;
+    std::deque<ros::Time> cam_state_time_deque;
+
+    int odom_save_size_ = 600;
+    common::Time last_auto_capture;
+    ros::Time last_manual_capture;
+    bool manual_trigger = false;
+    double capture_interval = 0.1;
 };
 
 class GazeboPPComPlugin : public ModelPlugin {
@@ -167,7 +182,11 @@ class GazeboPPComPlugin : public ModelPlugin {
   void readPCloud(std::string filename);
   void TimerCallback(const ros::TimerEvent &, int node_idx);
   void GimbalCallback(const geometry_msgs::TwistConstPtr &msg, int node_idx);
-  
+  void EvaluateCam(PPComNode& node_i, ros::Time time_of_evaluate);
+  void findClosestOdom(ros::Time stamp, PPComNode& node_i, nav_msgs::Odometry& odom);
+  void findClosestGimState(ros::Time stamp, PPComNode& node_i, Vector3d& cam_rpy, Vector3d& cam_rpy_rate);
+  void triggerCallback(const rotors_comm::BoolStamped::ConstPtr &msg, int node_idx);
+
   string namespace_;
   string ppcom_topic_;
 
@@ -224,7 +243,7 @@ class GazeboPPComPlugin : public ModelPlugin {
   pcl::search::KdTree<PointXYZIN> kdTreeInterestPts_;
   CloudXYZINPtr cloud_inpo_;
   ros::Publisher cloud_inpo_pub_;
-  double gimbal_update_hz_ = 10.0;
+  double gimbal_update_hz_ = 20.0;
   double gimbal_rate_max_  = 45.0/180.0*M_PI;
   double gimbal_pitch_max_ = 70.0/180.0*M_PI;
   double gimbal_yaw_max_   = 80.0/180.0*M_PI;

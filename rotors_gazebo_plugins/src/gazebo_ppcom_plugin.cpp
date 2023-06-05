@@ -86,8 +86,10 @@ namespace gazebo
 
     PPComNode::PPComNode(const string &name_, const string &role_, const double &offset_,
                          const double &hfov, const double &vfov, const double &cam_x,
-                         const double &cam_y, const double &cam_z)
-        : name(name_), role(role_), offset(offset_), fov_h(hfov), fov_v(vfov)
+                         const double &cam_y, const double &cam_z, const double &exposure,
+                         const double &trig_interval)
+        : name(name_), role(role_), offset(offset_), fov_h(hfov), fov_v(vfov), 
+          exposure(exposure), capture_interval(trig_interval)
     {
         // Set cov diagonal this to -1 to indicate no reception yet
         for (auto &c : this->odom_msg.pose.covariance)
@@ -208,7 +210,8 @@ namespace gazebo
             // Decode the line and construct the node
             vector<string> parts = Util::split(line, ",");
             ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2]), stod(parts[3]),
-                                             stod(parts[4]), stod(parts[5]), stod(parts[6]), stod(parts[7])));
+                                             stod(parts[4]), stod(parts[5]), stod(parts[6]), 
+                                             stod(parts[7]), stod(parts[8]), stod(parts[9])));
         }
 
         // Assert that ppcom_id_ is found in the network
@@ -246,6 +249,9 @@ namespace gazebo
             // Create the subscriber to each nodes
             node.odom_sub = ros_node_handle_->subscribe<nav_msgs::Odometry>("/" + node.name + "/ground_truth/odometry", 1,
                                                                             boost::bind(&GazeboPPComPlugin::OdomCallback, this, _1, node_idx));
+
+            node.trigger_sub = ros_node_handle_->subscribe<rotors_comm::BoolStamped>("/" + node.name + "/command/trigger", 1,
+                                                                            boost::bind(&GazeboPPComPlugin::triggerCallback, this, _1, node_idx));
             // Publisher for the topology
             if (node.role == "manager")
                 node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
@@ -296,6 +302,14 @@ namespace gazebo
             node.gimbal_cmd = Eigen::VectorXd(6);
             node.gimbal_cmd.setZero();
             node.gimbal_cmd_last_update = ros::Time::now();
+
+            node.odom_deque.clear();
+            node.trigger_deque.clear();
+            node.cam_rpy_deque.clear();
+            node.cam_rpy_rate_deque.clear();
+            node.cam_state_time_deque.clear();
+            node.last_auto_capture = world_->SimTime();
+            node.last_manual_capture = ros::Time::now();
         }
 
         cloud_inpo_pub_ = ros_node_handle_->advertise<sensor_msgs::PointCloud2>("/interest_cloud", 100);
@@ -322,6 +336,10 @@ namespace gazebo
     {
         ppcom_nodes_[node_idx].odom_msg = *msg;
         ppcom_nodes_[node_idx].odom_msg_received = true;
+
+        ppcom_nodes_[node_idx].odom_deque.push_back(*msg);
+        if (ppcom_nodes_[node_idx].odom_deque.size() > ppcom_nodes_[node_idx].odom_save_size_)
+            ppcom_nodes_[node_idx].odom_deque.pop_front();
     }
 
     void GazeboPPComPlugin::OnUpdateCheckTopology(const common::UpdateInfo &_info)
@@ -443,23 +461,23 @@ namespace gazebo
 
     void GazeboPPComPlugin::UpdateInterestPoints()
     {
-        gazebo::common::Time current_time = world_->SimTime();
-        double dt_inspection = (current_time - last_time_inpo_).Double();
-        if (dt_inspection > 1.0 / cam_evaluate_hz_)
+        bool published_int_cloud = false;
+        for (int i = 0; i < Nnodes_; i++)
         {
-            last_time_inpo_ = current_time;
-            for (int i = 0; i < Nnodes_; i++)
+            PPComNode &node_i = ppcom_nodes_[i];
+
+            // GCS no need to check detection
+            if (node_i.name == "gcs")
+                continue;
+
+            if (!node_i.odom_msg_received)
+                continue;
+
+            gazebo::common::Time current_time = world_->SimTime();
+            double dt_inspection = (current_time - node_i.last_auto_capture).Double();
+            if (dt_inspection > node_i.capture_interval)
             {
-                PPComNode &node_i = ppcom_nodes_[i];
-                std::map<int, IndexedInterestPoint> &nodeIPLog = node_i.InPoLog;
-
-                // GCS no need to check detection
-                if (node_i.name == "gcs")
-                    continue;
-
-                if (!node_i.odom_msg_received)
-                    continue;
-
+                node_i.last_auto_capture = current_time;
                 visualization_msgs::Marker m;
                 m.type = visualization_msgs::Marker::LINE_STRIP;
                 m.action = visualization_msgs::Marker::DELETEALL;
@@ -478,167 +496,27 @@ namespace gazebo
                 m.header.frame_id = "world";
                 node_i.camera_pyramid_pub.publish(m);
 
-                // Create the start points
-                myTf<double> tf_uav(node_i.odom_msg);
-                // Vector3d pi(node_i.odom_msg.pose.pose.position.x,
-                //             node_i.odom_msg.pose.pose.position.y,
-                //             node_i.odom_msg.pose.pose.position.z);
-                Vector3d p_cam_world = tf_uav * node_i.Cam_rel_Uav;
-                PointXYZIN pos_cam;
-                pos_cam.x = p_cam_world(0);
-                pos_cam.y = p_cam_world(1);
-                pos_cam.z = p_cam_world(2);
-                // node_i.cam_ypr = Vector3d(0.0, node_i., tf_uav.yaw());
-                Vector3d ypr(tf_uav.yaw() + node_i.cam_rpy(2) / M_PI * 180.0, node_i.cam_rpy(1) / M_PI * 180.0, 0.0);
-                myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);
-
-                std::vector<int> k_idx; std::vector<float> k_distances;
-                kdTreeInterestPts_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);
-
-                // odometry message gives velocity in body frame
-                Vector3d v_uav_world = tf_uav.rot * Vector3d(node_i.odom_msg.twist.twist.linear.x,
-                                                             node_i.odom_msg.twist.twist.linear.y,
-                                                             node_i.odom_msg.twist.twist.linear.z);
-
-                // angvel uav is expressed in body frame
-                Vector3d angv_uav(node_i.odom_msg.twist.twist.angular.x,
-                                  node_i.odom_msg.twist.twist.angular.y,
-                                  node_i.odom_msg.twist.twist.angular.z);
-
-                Vector3d v_cam_world = v_uav_world + tf_uav.rot * Util::skewSymmetric(angv_uav) * node_i.Cam_rel_Uav;
-
-                for (int j = 0; j < k_idx.size(); j++) //
+                if (!node_i.manual_trigger)
                 {
-                    PointXYZIN &kpoint = cloud_inpo_->points[k_idx[j]];
-                    assert(kpoint.curvature == k_idx[j]);
-                    Vector3d InPoint_world(kpoint.x, kpoint.y, kpoint.z);
-                    Vector3d InPoint_cam = tf_cam.inverse() * InPoint_world;
-
-                    if (InPoint_cam(0) <= 0.0)
-                        continue;
-
-                    double horz_angle = atan(InPoint_cam(1) / InPoint_cam(0)) / M_PI * 180.0;
-                    double vert_angle = atan(InPoint_cam(2) / InPoint_cam(0)) / M_PI * 180.0;
-
-                    if (horz_angle > node_i.fov_h / 2 || horz_angle < -node_i.fov_h / 2 ||
-                        vert_angle > node_i.fov_v / 2 || vert_angle < -node_i.fov_v / 2)
-                        continue;
-
-                    double visualized = false;
-                    if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_inpo))
-                    {
-                        // Temporary point to be evaluated for actual detection
-                        PointXYZIN detected_point = kpoint; detected_point.intensity = 0;
-
-                        MatrixXd R_dot_cam(3,3);
-                        R_dot_cam << -node_i.cam_rpy_rate(2)*sin(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1))-
-                                      node_i.cam_rpy_rate(1)*cos(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1)),
-                                     -node_i.cam_rpy_rate(2)*cos(node_i.cam_rpy(2)), 
-                                     -node_i.cam_rpy_rate(2)*sin(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1))+
-                                      node_i.cam_rpy_rate(1)*cos(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1)),
-                                      node_i.cam_rpy_rate(2)*cos(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1))-
-                                      node_i.cam_rpy_rate(1)*sin(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1)), 
-                                     -node_i.cam_rpy_rate(2)*sin(node_i.cam_rpy(2)),
-                                      node_i.cam_rpy_rate(2)*cos(node_i.cam_rpy(2))*sin(node_i.cam_rpy(1))+
-                                      node_i.cam_rpy_rate(1)*sin(node_i.cam_rpy(2))*cos(node_i.cam_rpy(1)),
-                                     -node_i.cam_rpy_rate(1)*cos(node_i.cam_rpy(1)), 0.0, 
-                                     -node_i.cam_rpy_rate(1)*sin(node_i.cam_rpy(1));
-                        //in Z-Y-X rotation sequence, the euler yaw rate is ang vel z
-                        Vector3d angvel_virtual_frame(0.0, 0.0, node_i.odom_msg.twist.twist.angular.z); 
-                        MatrixXd angvel_cam_skew = Util::skewSymmetric(angvel_virtual_frame) + 
-                                                    Util::YPR2Rot(tf_uav.yaw(), 0.0, 0.0) * R_dot_cam * tf_cam.rot.inverse();
-                        if (fabs(angvel_cam_skew(0,1)+angvel_cam_skew(1,0))>0.05)
-                            ROS_INFO("NOT RIGHT! angvel_cam_skew not skew-symmetric!!");
-
-                        Vector3d v_point_in_cam = -tf_cam.rot.inverse().normalized().toRotationMatrix() * 
-                                                  (angvel_cam_skew * (InPoint_world  - p_cam_world) +  v_cam_world);
-                        Vector3d InPoint_cam_moved = InPoint_cam + v_point_in_cam * node_i.exposure;
-                        // horizontal camera pixels
-                        double pixel_move_v = node_i.focal_length * fabs(InPoint_cam(1) / InPoint_cam(0) -
-                                              InPoint_cam_moved(1) / InPoint_cam_moved(0)) / node_i.pixel_size;
-                        // vertical camera pixels
-                        double pixel_move_u = node_i.focal_length * fabs(InPoint_cam(2) / InPoint_cam(0) -
-                                              InPoint_cam_moved(2) / InPoint_cam_moved(0)) / node_i.pixel_size;
-
-                        double score1 = 1.0 - min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
-
-                        // compute resolution requirement mm per pixel
-                        Vector3d Normal_world(kpoint.normal_x, kpoint.normal_y, kpoint.normal_z);
-                        Vector3d Normal_cam = (tf_cam.rot.inverse() * Normal_world).normalized();
-                        // Normal_cam = Vector3d(-1.0, 0.0, 0.0); //for testing only
-                        Vector3d x_disp(-Normal_cam(2), 0.0, Normal_cam(0)); // the gradient projected on the x-z plane
-                        Vector3d inPoint_xplus = InPoint_cam + 0.0005 * x_disp;
-                        Vector3d inPoint_xminus = InPoint_cam - 0.0005 * x_disp;
-                        double v_plus = inPoint_xplus(2) * node_i.focal_length / inPoint_xplus(0);
-                        double v_minus = inPoint_xminus(2) * node_i.focal_length / inPoint_xminus(0);
-                        double mm_per_pixel_v = node_i.pixel_size / fabs(v_plus - v_minus);
-
-                        Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); // the gradient projected on the x-y plane
-                        Vector3d inPoint_yplus = InPoint_cam + 0.0005 * y_disp;
-                        Vector3d inPoint_yminus = InPoint_cam - 0.0005 * y_disp;
-                        double u_plus = inPoint_yplus(1) * node_i.focal_length / inPoint_yplus(0);
-                        double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
-                        double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
-
-                        double score2 = max(0.0, 1.0 - max(max(mm_per_pixel_v, mm_per_pixel_u) - 6.0, 0.0) / 10.0);
-                        double score = score1 * score2;
-                        if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
-                            inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
-                        {
-                            ROS_INFO("NOT RIGHT! X smaller than zero!!");
-                            continue;
-                        }
-
-                        // std::cout<<"mm_per pixel u is "<<mm_per_pixel_u<<"mm_per pixel v is "<<mm_per_pixel_v<<std::endl;
-                        if (score > cloud_inpo_->points[k_idx[j]].intensity)
-                            cloud_inpo_->points[k_idx[j]].intensity = score;
-
-                        detected_point.intensity = score;
-                        int point_idx = (int)detected_point.curvature;
-
-                        if (nodeIPLog.find(point_idx) == nodeIPLog.end())
-                            nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog.size(), detected_point);
-                        else if (nodeIPLog[point_idx].scored_point.intensity < detected_point.intensity)
-                            nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog[point_idx].detected_order, detected_point); 
-
-                        // CloudDtectedInPo->clear();
-                        // for(map< int, pair<int, PointXYZIN> >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
-                        //     CloudDtectedInPo->push_back(itr->second.second);
-                        
-                        // // if (visualized) continue;
-                        // visualized = true;
-                        // visualization_msgs::Marker m;
-                        // m.type   = visualization_msgs::Marker::ARROW;
-                        // m.action = visualization_msgs::Marker::ADD;
-                        // m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
-                        // m.ns     = "view_agent_1";
-
-                        // m.color.a = 1.0; // Don't forget to set the alpha!
-                        // m.color.r = 0.0;
-                        // m.color.g = 1.0;
-                        // m.color.b = 0.0;
-
-                        // m.scale.x = 0.15;
-                        // m.scale.y = 0.25;
-                        // m.scale.z = 0.4;
-                        // m.header.stamp = ros::Time::now();
-                        // m.header.frame_id = "world";
-                        // geometry_msgs::Point point1;
-                        // point1.x = InPoint_world(0);
-                        // point1.y = InPoint_world(1);
-                        // point1.z = InPoint_world(2);
-                        // m.points.push_back(point1);
-                        // Vector3d v_point_world = tf_cam.rot* v_point_in_cam*1.0;
-                        // point1.x = InPoint_world(0) + v_point_world(0);
-                        // point1.y = InPoint_world(1) + v_point_world(1);
-                        // point1.z = InPoint_world(2) + v_point_world(2);
-                        // m.points.push_back(point1);
-                        // node_i.camera_pyramid_pub.publish(m);
-
-                        // ROS_INFO("Setting points to high intensity!!");
-                    }
+                    EvaluateCam(node_i, ros::Time::now());
                 }
-
+                else
+                {
+                    while (!node_i.trigger_deque.empty())
+                    {
+                        if (node_i.trigger_deque.front().data == false) continue;
+                        if ((node_i.trigger_deque.front().header.stamp - node_i.last_manual_capture).toSec()>
+                             node_i.capture_interval) 
+                        {
+                            EvaluateCam(node_i, node_i.trigger_deque.front().header.stamp);
+                            node_i.last_manual_capture = node_i.trigger_deque.front().header.stamp;
+                        }
+                        node_i.trigger_deque.pop_front();
+                    }
+                    
+                }
+                
+                std::map<int, IndexedInterestPoint> &nodeIPLog = node_i.InPoLog;
                 // Copy the detected points to the cloud and publish it
                 CloudXYZINPtr CloudDtectedInPo(new CloudXYZIN());
                 CloudDtectedInPo->resize(nodeIPLog.size());
@@ -655,6 +533,10 @@ namespace gazebo
                 Util::publishCloud(node_i.CloudDetectedInpoPub, *CloudDtectedInPo, ros::Time::now(), "world");   
 
                 // Visualize the frustrum
+                myTf<double> tf_uav(node_i.odom_msg);
+                Vector3d p_cam_world = tf_uav * node_i.Cam_rel_Uav;
+                Vector3d ypr(tf_uav.yaw() + node_i.cam_rpy(2) / M_PI * 180.0, node_i.cam_rpy(1) / M_PI * 180.0, 0.0);
+                myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);                
                 std::vector<Vector3d> point_list_in_world;
                 point_list_in_world.push_back(p_cam_world);
                 for (double k : {1.0, -1.0})
@@ -662,8 +544,8 @@ namespace gazebo
                     for (double l : {1.0, -1.0})
                     {
                         Vector3d point_in_cam(node_i.visible_radius,
-                                              k * tan(node_i.fov_h * 0.008726646) * node_i.visible_radius,
-                                              l * tan(node_i.fov_v * 0.008726646) * node_i.visible_radius);
+                                                k * tan(node_i.fov_h * 0.008726646) * node_i.visible_radius,
+                                                l * tan(node_i.fov_v * 0.008726646) * node_i.visible_radius);
                         Vector3d point_in_world = tf_cam * point_in_cam;
                         point_list_in_world.push_back(point_in_world);
                     }
@@ -711,12 +593,186 @@ namespace gazebo
                     m.points.push_back(point1);
                 }
                 node_i.camera_pyramid_pub.publish(m);
+
+                if (!published_int_cloud)
+                {
+                    published_int_cloud = true;
+                    Util::publishCloud(cloud_inpo_pub_, *cloud_inpo_, ros::Time::now(), "world");
+                }
             }
 
-            Util::publishCloud(cloud_inpo_pub_, *cloud_inpo_, ros::Time::now(), "world");
         }
+
     }
     
+    void GazeboPPComPlugin::EvaluateCam(PPComNode& node_i, ros::Time time_of_evaluate)
+    {
+        std::map<int, IndexedInterestPoint> &nodeIPLog = node_i.InPoLog;
+
+        nav_msgs::Odometry _odom_msg;
+        Vector3d _cam_rpy;
+        Vector3d _cam_rpy_rate;
+        findClosestOdom(time_of_evaluate, node_i, _odom_msg);
+        findClosestGimState(time_of_evaluate, node_i, _cam_rpy, _cam_rpy_rate);
+        myTf<double> tf_uav(_odom_msg);
+
+        Vector3d p_cam_world = tf_uav * node_i.Cam_rel_Uav;
+        PointXYZIN pos_cam;
+        pos_cam.x = p_cam_world(0);
+        pos_cam.y = p_cam_world(1);
+        pos_cam.z = p_cam_world(2);
+        // node_i.cam_ypr = Vector3d(0.0, node_i., tf_uav.yaw());
+        Vector3d ypr(tf_uav.yaw() + _cam_rpy(2) / M_PI * 180.0, _cam_rpy(1) / M_PI * 180.0, 0.0);
+        myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);
+
+        std::vector<int> k_idx; std::vector<float> k_distances;
+        kdTreeInterestPts_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);
+
+        // odometry message gives velocity in body frame
+        Vector3d v_uav_world = tf_uav.rot * Vector3d(_odom_msg.twist.twist.linear.x,
+                                                     _odom_msg.twist.twist.linear.y,
+                                                     _odom_msg.twist.twist.linear.z);
+
+        // angvel uav is expressed in body frame
+        Vector3d angv_uav(_odom_msg.twist.twist.angular.x,
+                          _odom_msg.twist.twist.angular.y,
+                          _odom_msg.twist.twist.angular.z);
+
+        Vector3d v_cam_world = v_uav_world + tf_uav.rot * Util::skewSymmetric(angv_uav) * node_i.Cam_rel_Uav;
+
+        for (int j = 0; j < k_idx.size(); j++) //
+        {
+            PointXYZIN &kpoint = cloud_inpo_->points[k_idx[j]];
+            assert(kpoint.curvature == k_idx[j]);
+            Vector3d InPoint_world(kpoint.x, kpoint.y, kpoint.z);
+            Vector3d InPoint_cam = tf_cam.inverse() * InPoint_world;
+
+            if (InPoint_cam(0) <= 0.0)
+                continue;
+
+            double horz_angle = atan(InPoint_cam(1) / InPoint_cam(0)) / M_PI * 180.0;
+            double vert_angle = atan(InPoint_cam(2) / InPoint_cam(0)) / M_PI * 180.0;
+
+            if (horz_angle > node_i.fov_h / 2 || horz_angle < -node_i.fov_h / 2 ||
+                vert_angle > node_i.fov_v / 2 || vert_angle < -node_i.fov_v / 2)
+                continue;
+
+            double visualized = false;
+            if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_inpo))
+            {
+                // Temporary point to be evaluated for actual detection
+                PointXYZIN detected_point = kpoint; detected_point.intensity = 0;
+
+                MatrixXd R_dot_cam(3,3);
+                R_dot_cam << -_cam_rpy_rate(2)*sin(_cam_rpy(2))*cos(_cam_rpy(1))-
+                              _cam_rpy_rate(1)*cos(_cam_rpy(2))*sin(_cam_rpy(1)),
+                             -_cam_rpy_rate(2)*cos(_cam_rpy(2)), 
+                             -_cam_rpy_rate(2)*sin(_cam_rpy(2))*sin(_cam_rpy(1))+
+                              _cam_rpy_rate(1)*cos(_cam_rpy(2))*cos(_cam_rpy(1)),
+                              _cam_rpy_rate(2)*cos(_cam_rpy(2))*cos(_cam_rpy(1))-
+                              _cam_rpy_rate(1)*sin(_cam_rpy(2))*sin(_cam_rpy(1)), 
+                             -_cam_rpy_rate(2)*sin(_cam_rpy(2)),
+                              _cam_rpy_rate(2)*cos(_cam_rpy(2))*sin(_cam_rpy(1))+
+                              _cam_rpy_rate(1)*sin(_cam_rpy(2))*cos(_cam_rpy(1)),
+                             -_cam_rpy_rate(1)*cos(_cam_rpy(1)), 0.0, 
+                             -_cam_rpy_rate(1)*sin(_cam_rpy(1));
+                //in Z-Y-X rotation sequence, the euler yaw rate is ang vel z
+                Vector3d angvel_virtual_frame(0.0, 0.0, _odom_msg.twist.twist.angular.z); 
+                MatrixXd angvel_cam_skew = Util::skewSymmetric(angvel_virtual_frame) + 
+                                            Util::YPR2Rot(tf_uav.yaw(), 0.0, 0.0) * R_dot_cam * tf_cam.rot.inverse();
+                if (fabs(angvel_cam_skew(0,1)+angvel_cam_skew(1,0))>0.05)
+                    ROS_INFO("NOT RIGHT! angvel_cam_skew not skew-symmetric!!");
+
+                Vector3d v_point_in_cam = -tf_cam.rot.inverse().normalized().toRotationMatrix() * 
+                                            (angvel_cam_skew * (InPoint_world  - p_cam_world) +  v_cam_world);
+                Vector3d InPoint_cam_moved = InPoint_cam + v_point_in_cam * node_i.exposure;
+                // horizontal camera pixels
+                double pixel_move_v = node_i.focal_length * fabs(InPoint_cam(1) / InPoint_cam(0) -
+                                        InPoint_cam_moved(1) / InPoint_cam_moved(0)) / node_i.pixel_size;
+                // vertical camera pixels
+                double pixel_move_u = node_i.focal_length * fabs(InPoint_cam(2) / InPoint_cam(0) -
+                                        InPoint_cam_moved(2) / InPoint_cam_moved(0)) / node_i.pixel_size;
+
+                double score1 = 1.0 - min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
+
+                // compute resolution requirement mm per pixel
+                Vector3d Normal_world(kpoint.normal_x, kpoint.normal_y, kpoint.normal_z);
+                Vector3d Normal_cam = (tf_cam.rot.inverse() * Normal_world).normalized();
+                // Normal_cam = Vector3d(-1.0, 0.0, 0.0); //for testing only
+                Vector3d x_disp(-Normal_cam(2), 0.0, Normal_cam(0)); // the gradient projected on the x-z plane
+                Vector3d inPoint_xplus = InPoint_cam + 0.0005 * x_disp;
+                Vector3d inPoint_xminus = InPoint_cam - 0.0005 * x_disp;
+                double v_plus = inPoint_xplus(2) * node_i.focal_length / inPoint_xplus(0);
+                double v_minus = inPoint_xminus(2) * node_i.focal_length / inPoint_xminus(0);
+                double mm_per_pixel_v = node_i.pixel_size / fabs(v_plus - v_minus);
+
+                Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); // the gradient projected on the x-y plane
+                Vector3d inPoint_yplus = InPoint_cam + 0.0005 * y_disp;
+                Vector3d inPoint_yminus = InPoint_cam - 0.0005 * y_disp;
+                double u_plus = inPoint_yplus(1) * node_i.focal_length / inPoint_yplus(0);
+                double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
+                double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
+
+                double score2 = max(0.0, 1.0 - max(max(mm_per_pixel_v, mm_per_pixel_u) - 6.0, 0.0) / 10.0);
+                double score = score1 * score2;
+                if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
+                    inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
+                {
+                    ROS_INFO("NOT RIGHT! X smaller than zero!!");
+                    continue;
+                }
+
+                // std::cout<<"mm_per pixel u is "<<mm_per_pixel_u<<"mm_per pixel v is "<<mm_per_pixel_v<<std::endl;
+                if (score > cloud_inpo_->points[k_idx[j]].intensity)
+                    cloud_inpo_->points[k_idx[j]].intensity = score;
+
+                detected_point.intensity = score;
+                int point_idx = (int)detected_point.curvature;
+
+                if (nodeIPLog.find(point_idx) == nodeIPLog.end())
+                    nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog.size(), detected_point);
+                else if (nodeIPLog[point_idx].scored_point.intensity < detected_point.intensity)
+                    nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog[point_idx].detected_order, detected_point); 
+
+                // CloudDtectedInPo->clear();
+                // for(map< int, pair<int, PointXYZIN> >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
+                //     CloudDtectedInPo->push_back(itr->second.second);
+                
+                // // if (visualized) continue;
+                // visualized = true;
+                // visualization_msgs::Marker m;
+                // m.type   = visualization_msgs::Marker::ARROW;
+                // m.action = visualization_msgs::Marker::ADD;
+                // m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
+                // m.ns     = "view_agent_1";
+
+                // m.color.a = 1.0; // Don't forget to set the alpha!
+                // m.color.r = 0.0;
+                // m.color.g = 1.0;
+                // m.color.b = 0.0;
+
+                // m.scale.x = 0.15;
+                // m.scale.y = 0.25;
+                // m.scale.z = 0.4;
+                // m.header.stamp = ros::Time::now();
+                // m.header.frame_id = "world";
+                // geometry_msgs::Point point1;
+                // point1.x = InPoint_world(0);
+                // point1.y = InPoint_world(1);
+                // point1.z = InPoint_world(2);
+                // m.points.push_back(point1);
+                // Vector3d v_point_world = tf_cam.rot* v_point_in_cam*1.0;
+                // point1.x = InPoint_world(0) + v_point_world(0);
+                // point1.y = InPoint_world(1) + v_point_world(1);
+                // point1.z = InPoint_world(2) + v_point_world(2);
+                // m.points.push_back(point1);
+                // node_i.camera_pyramid_pub.publish(m);
+
+                // ROS_INFO("Setting points to high intensity!!");
+            }
+        }
+
+    }
     void GazeboPPComPlugin::TallyScore()
     {
         // Go through the log of each node in line of sight of GCS to tally the score
@@ -887,6 +943,17 @@ namespace gazebo
             double yaw = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2) * 1.0 / gimbal_update_hz_;
             node_i.cam_rpy(2) = max(-gimbal_yaw_max_, min(gimbal_yaw_max_, yaw));
         }
+
+        node_i.cam_rpy_deque.push_back(node_i.cam_rpy);
+        node_i.cam_rpy_rate_deque.push_back(node_i.cam_rpy_rate);
+        node_i.cam_state_time_deque.push_back(ros::Time::now());
+        if (node_i.cam_rpy_deque.size() > node_i.odom_save_size_)
+        {
+            node_i.cam_rpy_deque.pop_front();
+            node_i.cam_rpy_rate_deque.pop_front();
+            node_i.cam_state_time_deque.pop_front();
+        }
+
         geometry_msgs::TwistStamped gimbal_state;
         gimbal_state.header.stamp = ros::Time::now();
         gimbal_state.header.frame_id = "gimbal";
@@ -995,6 +1062,115 @@ namespace gazebo
         if (fabs(rtDist - ppDist) <= 0.025)
             return true;
         return los;
+    }
+
+    void GazeboPPComPlugin::findClosestOdom(ros::Time stamp, PPComNode& node_i, nav_msgs::Odometry& odom)
+    {
+        if (node_i.odom_deque.back().header.stamp - stamp < ros::Duration(0))
+        {
+            odom = node_i.odom_deque.back();
+            return;
+        }
+        else if (node_i.odom_deque.front().header.stamp - stamp > ros::Duration(0))
+        {
+            ROS_WARN("trigger time out of the range of the buffer! leave if first!!");
+            odom = node_i.odom_deque.front();
+            return;
+        }
+
+        int oldest = 0;
+        int newest = node_i.odom_deque.size() - 1;
+        if (newest <= 0)
+        {
+            ROS_WARN("findClosestOdom: not many odom received!!");
+            return;
+        }
+        int mid;
+        while (newest - oldest > 1)
+        {
+            mid = oldest + (newest - oldest) / 2;
+            if (node_i.odom_deque[mid].header.stamp - stamp < ros::Duration(0))
+                oldest = mid;
+            else
+                newest = mid;
+        }
+
+        if (stamp - node_i.odom_deque[oldest].header.stamp >
+            node_i.odom_deque[newest].header.stamp - stamp)
+        {
+            odom = node_i.odom_deque[newest];
+        }
+        else
+        {
+            odom = node_i.odom_deque[oldest];
+        }
+
+        if (fabs((odom.header.stamp - stamp).toSec()) > 0.03)
+            ROS_WARN("findClosestOdom: found odom is too far from the trigger time!!");
+
+        return;
+    }
+
+    void GazeboPPComPlugin::findClosestGimState(ros::Time stamp, PPComNode& node_i, 
+                                                Vector3d& cam_rpy, Vector3d& cam_rpy_rate)
+    {
+        if (node_i.cam_state_time_deque.back() - stamp < ros::Duration(0))
+        {
+            cam_rpy = node_i.cam_rpy_deque.back();
+            cam_rpy_rate = node_i.cam_rpy_rate_deque.back();
+            return;
+        }
+        else if (node_i.cam_state_time_deque.front() - stamp > ros::Duration(0))
+        {
+            ROS_WARN("trigger time out of the range of the buffer! leave if first!!");
+            cam_rpy = node_i.cam_rpy_deque.front();
+            cam_rpy_rate = node_i.cam_rpy_rate_deque.front();            
+            return;
+        }
+
+        int oldest = 0;
+        int newest = node_i.cam_state_time_deque.size() - 1;
+        if (newest <= 0)
+        {
+            ROS_WARN("findClosestGimState: not many odom received!!");
+            return;
+        }
+        int mid;
+        while (newest - oldest > 1) //binary search
+        {
+            mid = oldest + (newest - oldest) / 2;
+            if (node_i.cam_state_time_deque[mid] - stamp < ros::Duration(0))
+                oldest = mid;
+            else
+                newest = mid;
+        }
+
+        int idx;
+        if (stamp - node_i.cam_state_time_deque[oldest] >
+            node_i.cam_state_time_deque[newest] - stamp)
+        {
+            idx = newest;
+        }
+        else
+        {
+            idx = oldest;;
+        }
+
+        if (fabs((node_i.cam_state_time_deque[idx] - stamp).toSec()) > 0.05)
+            ROS_WARN("findClosestGimState: found gimbal state is too far from the trigger time!!");
+
+        cam_rpy = node_i.cam_rpy_deque[idx];
+        cam_rpy_rate = node_i.cam_rpy_rate_deque[idx];    
+        return;
+    }
+
+    void GazeboPPComPlugin::triggerCallback(const rotors_comm::BoolStamped::ConstPtr &msg, int node_idx)
+    {
+        ppcom_nodes_[node_idx].trigger_deque.push_back(*msg);
+        if (ppcom_nodes_[node_idx].trigger_deque.size() > 10)
+        {
+            ROS_WARN("Many camera capture commands in the buffer!!");
+        }
     }
 
     GZ_REGISTER_MODEL_PLUGIN(GazeboPPComPlugin);
