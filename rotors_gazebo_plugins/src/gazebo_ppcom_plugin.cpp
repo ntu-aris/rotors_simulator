@@ -676,8 +676,16 @@ namespace gazebo
                               _cam_rpy_rate(1)*sin(_cam_rpy(2))*cos(_cam_rpy(1)),
                              -_cam_rpy_rate(1)*cos(_cam_rpy(1)), 0.0, 
                              -_cam_rpy_rate(1)*sin(_cam_rpy(1));
-                //in Z-Y-X rotation sequence, the euler yaw rate is ang vel z
-                Vector3d angvel_virtual_frame(0.0, 0.0, _odom_msg.twist.twist.angular.z); 
+
+                double phi = tf_uav.roll()/180.0*M_PI;
+                double theta = tf_uav.pitch()/180.0*M_PI;
+                MatrixXd B_matrix(3,3);
+                B_matrix << -sin(theta),           0.0,       1.0,
+                             sin(phi)*cos(theta),  cos(phi),  0.0,
+                             cos(phi)*cos(theta), -sin(phi),  0.0;
+                Vector3d euler_rate = B_matrix.inverse()*angv_uav; //angvel is alr in body frame uav
+                Vector3d angvel_virtual_frame(0.0, 0.0, euler_rate(0)); 
+
                 MatrixXd angvel_cam_skew = Util::skewSymmetric(angvel_virtual_frame) + 
                                             Util::YPR2Rot(tf_uav.yaw(), 0.0, 0.0) * R_dot_cam * tf_cam.rot.inverse();
                 if (fabs(angvel_cam_skew(0,1)+angvel_cam_skew(1,0))>0.05)
