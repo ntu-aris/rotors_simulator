@@ -701,7 +701,7 @@ namespace gazebo
                 double pixel_move_u = node_i.focal_length * fabs(InPoint_cam(2) / InPoint_cam(0) -
                                         InPoint_cam_moved(2) / InPoint_cam_moved(0)) / node_i.pixel_size;
 
-                double score1 = 1.0 - min(max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
+                double score1 = min(1.0 / max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
 
                 // compute resolution requirement mm per pixel
                 Vector3d Normal_world(kpoint.normal_x, kpoint.normal_y, kpoint.normal_z);
@@ -721,7 +721,7 @@ namespace gazebo
                 double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
                 double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
 
-                double score2 = max(0.0, 1.0 - max(max(mm_per_pixel_v, mm_per_pixel_u) - 6.0, 0.0) / 10.0);
+                double score2 = min(5.0 / max(mm_per_pixel_v, mm_per_pixel_u), 1.0);
                 double score = score1 * score2;
                 if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
                     inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
