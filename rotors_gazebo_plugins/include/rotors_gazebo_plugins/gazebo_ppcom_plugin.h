@@ -81,7 +81,8 @@ struct PPComNode
     PPComNode(const string &name_, const string &role_, const double &offset_,
               const double &hfov, const double &vfov, const double &cam_x,
               const double &cam_y, const double &cam_z, const double &exposure,
-              const double &trig_interval);
+              const double &trig_interval, const double &focal_length_,
+              const double &pixel_size_, const double &desired_mm_per_pixel_);
    ~PPComNode();
 
     Eigen::MatrixXd GetTopology();
@@ -152,6 +153,7 @@ struct PPComNode
     ros::Time last_manual_capture;
     bool manual_trigger = false;
     double capture_interval = 0.1;
+    double desired_mm_per_pixel = 3.0;
 };
 
 class GazeboPPComPlugin : public ModelPlugin {

@@ -87,9 +87,11 @@ namespace gazebo
     PPComNode::PPComNode(const string &name_, const string &role_, const double &offset_,
                          const double &hfov, const double &vfov, const double &cam_x,
                          const double &cam_y, const double &cam_z, const double &exposure,
-                         const double &trig_interval)
+                         const double &trig_interval, const double &focal_length_,
+                         const double &pixel_size_, const double &desired_mm_per_pixel_)
         : name(name_), role(role_), offset(offset_), fov_h(hfov), fov_v(vfov), 
-          exposure(exposure), capture_interval(trig_interval)
+          exposure(exposure), capture_interval(trig_interval), focal_length(focal_length_),
+          pixel_size(pixel_size_), desired_mm_per_pixel(desired_mm_per_pixel_)
     {
         // Set cov diagonal this to -1 to indicate no reception yet
         for (auto &c : this->odom_msg.pose.covariance)
@@ -98,6 +100,10 @@ namespace gazebo
         topology_mtx = boost::shared_ptr<std::mutex>(new std::mutex());
 
         Cam_rel_Uav = Vector3d(cam_x, cam_y, cam_z);
+        double l = focal_length/pixel_size * 0.001 * desired_mm_per_pixel;
+        double side_h = l / cos(hfov*0.00872664625); // 1/2/180*pi
+        double side_v = l * tan(vfov*0.00872664625);
+        visible_radius = sqrt(side_h*side_h + side_v*side_v) + 5.0;
     }
 
     PPComNode::~PPComNode() {}
@@ -211,7 +217,8 @@ namespace gazebo
             vector<string> parts = Util::split(line, ",");
             ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2]), stod(parts[3]),
                                              stod(parts[4]), stod(parts[5]), stod(parts[6]), 
-                                             stod(parts[7]), stod(parts[8]), stod(parts[9])));
+                                             stod(parts[7]), stod(parts[8]), stod(parts[9]),
+                                             stod(parts[10]), stod(parts[11]), stod(parts[12])));
         }
 
         // Assert that ppcom_id_ is found in the network
@@ -539,13 +546,14 @@ namespace gazebo
                 myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);                
                 std::vector<Vector3d> point_list_in_world;
                 point_list_in_world.push_back(p_cam_world);
+                double dist = node_i.focal_length/node_i.pixel_size * 0.001 * node_i.desired_mm_per_pixel+5.0;
                 for (double k : {1.0, -1.0})
                 {
                     for (double l : {1.0, -1.0})
                     {
-                        Vector3d point_in_cam(node_i.visible_radius,
-                                                k * tan(node_i.fov_h * 0.008726646) * node_i.visible_radius,
-                                                l * tan(node_i.fov_v * 0.008726646) * node_i.visible_radius);
+                        Vector3d point_in_cam(dist,
+                                              k * tan(node_i.fov_h * 0.00872664625) * dist,
+                                              l * tan(node_i.fov_v * 0.00872664625) * dist);
                         Vector3d point_in_world = tf_cam * point_in_cam;
                         point_list_in_world.push_back(point_in_world);
                     }
@@ -721,7 +729,7 @@ namespace gazebo
                 double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
                 double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
 
-                double score2 = min(5.0 / max(mm_per_pixel_v, mm_per_pixel_u), 1.0);
+                double score2 = min(node_i.desired_mm_per_pixel / max(mm_per_pixel_v, mm_per_pixel_u), 1.0);
                 double score = score1 * score2;
                 if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
                     inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
@@ -890,7 +898,12 @@ namespace gazebo
                     score_atpoint.color.g = 1.0;
                     score_atpoint.color.b = 0.0;
                     score_atpoint.color.a = 1.0;
-                    score_atpoint.text = std::to_string(itr->second.scored_point.intensity);
+                    std::ostringstream streamObj3;
+                    streamObj3 << std::fixed;
+                    streamObj3 << std::setprecision(2);
+                    streamObj3 << itr->second.scored_point.intensity;
+                    score_atpoint.text = streamObj3.str();
+                    // score_atpoint.text = std::to_string(itr->second.scored_point.intensity);
                     score_at_point_all.markers.push_back(score_atpoint);
                 }
             }

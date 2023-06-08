@@ -1,7 +1,7 @@
-# Name     Role      AntOffset     HorzFOV      VertFOV    CamPosX    CamPosY    CamPosZ    ExposureTime   TriggerInterval
-gcs,       manager,  0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
-jurong,    peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
-raffles,   peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
-sentosa,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
-changi,    peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
-nanyang,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1
+# Name     Role      AntOffset     HorzFOV      VertFOV    CamPosX    CamPosY    CamPosZ    ExposureTime   TriggerInterval  FocalLength     PixelSize   DesiredMmPerPixel
+gcs,       manager,  0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1,            0.016,          4.35e-6,     3.0     
+jurong,    peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1,            0.016,          4.35e-6,     3.0    
+raffles,   peer,     0.2,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1,            0.016,          4.35e-6,     3.0    
+sentosa,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1,            0.016,          4.35e-6,     3.0    
+changi,    peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1,            0.016,          4.35e-6,     3.0    
+nanyang,   peer,     0.1,          90,          60,        0.2,       0.0,       -0.3,      0.001,          0.1,            0.016,          4.35e-6,     3.0    
