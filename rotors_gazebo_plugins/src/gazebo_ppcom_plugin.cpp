@@ -88,10 +88,15 @@ namespace gazebo
                          const double &hfov, const double &vfov, const double &cam_x,
                          const double &cam_y, const double &cam_z, const double &exposure,
                          const double &trig_interval, const double &focal_length_,
-                         const double &pixel_size_, const double &desired_mm_per_pixel_)
+                         const double &pixel_size_, const double &desired_mm_per_pixel_,
+                         const double &gimbal_pitch_max_, const double &gimbal_yaw_max_,
+                         const double &gimbal_rate_max_)
         : name(name_), role(role_), offset(offset_), fov_h(hfov), fov_v(vfov), 
           exposure(exposure), capture_interval(trig_interval), focal_length(focal_length_),
-          pixel_size(pixel_size_), desired_mm_per_pixel(desired_mm_per_pixel_)
+          pixel_size(pixel_size_), desired_mm_per_pixel(desired_mm_per_pixel_),
+          gimbal_pitch_max(gimbal_pitch_max_*0.01745329251), 
+          gimbal_yaw_max(gimbal_yaw_max_*0.01745329251),
+          gimbal_rate_max(gimbal_rate_max_*0.01745329251)
     {
         // Set cov diagonal this to -1 to indicate no reception yet
         for (auto &c : this->odom_msg.pose.covariance)
@@ -218,7 +223,8 @@ namespace gazebo
             ppcom_nodes_.push_back(PPComNode(parts[0], parts[1], stod(parts[2]), stod(parts[3]),
                                              stod(parts[4]), stod(parts[5]), stod(parts[6]), 
                                              stod(parts[7]), stod(parts[8]), stod(parts[9]),
-                                             stod(parts[10]), stod(parts[11]), stod(parts[12])));
+                                             stod(parts[10]), stod(parts[11]), stod(parts[12]),
+                                             stod(parts[13]), stod(parts[14]), stod(parts[15])));
         }
 
         // Assert that ppcom_id_ is found in the network
@@ -956,27 +962,27 @@ namespace gazebo
         }
         if (node_i.gimbal_cmd(0) > 0.0) // angle control mode
         {
-            double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, Util::wrapToPi(node_i.gimbal_cmd(1))));
-            double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, Util::wrapToPi(node_i.gimbal_cmd(2))));
-            // double pitch_cmd = min(gimbal_pitch_max_, max(-gimbal_pitch_max_, (node_i.gimbal_cmd(1))));
-            // double yaw_cmd = min(gimbal_yaw_max_, max(-gimbal_yaw_max_, (node_i.gimbal_cmd(2))));
+            double pitch_cmd = min(node_i.gimbal_pitch_max, max(-node_i.gimbal_pitch_max, Util::wrapToPi(node_i.gimbal_cmd(1))));
+            double yaw_cmd = min(node_i.gimbal_yaw_max, max(-node_i.gimbal_yaw_max, Util::wrapToPi(node_i.gimbal_cmd(2))));
+            // double pitch_cmd = min(node_i.gimbal_pitch_max, max(-node_i.gimbal_pitch_max, (node_i.gimbal_cmd(1))));
+            // double yaw_cmd = min(node_i.gimbal_yaw_max, max(-node_i.gimbal_yaw_max, (node_i.gimbal_cmd(2))));
 
-            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_,
+            node_i.cam_rpy_rate(1) = max(-node_i.gimbal_rate_max, min(node_i.gimbal_rate_max,
                                                                 (pitch_cmd - node_i.cam_rpy(1)) * gimbal_update_hz_));
-            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_,
+            node_i.cam_rpy_rate(2) = max(-node_i.gimbal_rate_max, min(node_i.gimbal_rate_max,
                                                                 (yaw_cmd - node_i.cam_rpy(2)) * gimbal_update_hz_));
             node_i.cam_rpy(1) = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1) * 1.0 / gimbal_update_hz_;
             node_i.cam_rpy(2) = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2) * 1.0 / gimbal_update_hz_;
         }
         if (node_i.gimbal_cmd(0) < -1e-7) // rate control mode
         {
-            node_i.cam_rpy_rate(1) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(4)));
+            node_i.cam_rpy_rate(1) = max(-node_i.gimbal_rate_max, min(node_i.gimbal_rate_max, node_i.gimbal_cmd(4)));
             double pitch = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1) * 1.0 / gimbal_update_hz_;
-            node_i.cam_rpy(1) = max(-gimbal_pitch_max_, min(gimbal_pitch_max_, pitch));
+            node_i.cam_rpy(1) = max(-node_i.gimbal_pitch_max, min(node_i.gimbal_pitch_max, pitch));
 
-            node_i.cam_rpy_rate(2) = max(-gimbal_rate_max_, min(gimbal_rate_max_, node_i.gimbal_cmd(5)));
+            node_i.cam_rpy_rate(2) = max(-node_i.gimbal_rate_max, min(node_i.gimbal_rate_max, node_i.gimbal_cmd(5)));
             double yaw = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2) * 1.0 / gimbal_update_hz_;
-            node_i.cam_rpy(2) = max(-gimbal_yaw_max_, min(gimbal_yaw_max_, yaw));
+            node_i.cam_rpy(2) = max(-node_i.gimbal_yaw_max, min(node_i.gimbal_yaw_max, yaw));
         }
 
         node_i.cam_rpy_deque.push_back(node_i.cam_rpy);

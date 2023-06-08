@@ -82,7 +82,9 @@ struct PPComNode
               const double &hfov, const double &vfov, const double &cam_x,
               const double &cam_y, const double &cam_z, const double &exposure,
               const double &trig_interval, const double &focal_length_,
-              const double &pixel_size_, const double &desired_mm_per_pixel_);
+              const double &pixel_size_, const double &desired_mm_per_pixel_,
+              const double &gimbal_pitch_max_, const double &gimbal_yaw_max_,
+              const double &gimbal_rate_max_);
    ~PPComNode();
 
     Eigen::MatrixXd GetTopology();
@@ -154,6 +156,9 @@ struct PPComNode
     bool manual_trigger = false;
     double capture_interval = 0.1;
     double desired_mm_per_pixel = 3.0;
+    double gimbal_rate_max  = 45.0/180.0*M_PI;
+    double gimbal_pitch_max = 70.0/180.0*M_PI;
+    double gimbal_yaw_max   = 80.0/180.0*M_PI;    
 };
 
 class GazeboPPComPlugin : public ModelPlugin {
@@ -246,9 +251,7 @@ class GazeboPPComPlugin : public ModelPlugin {
   CloudXYZINPtr cloud_inpo_;
   ros::Publisher cloud_inpo_pub_;
   double gimbal_update_hz_ = 20.0;
-  double gimbal_rate_max_  = 45.0/180.0*M_PI;
-  double gimbal_pitch_max_ = 70.0/180.0*M_PI;
-  double gimbal_yaw_max_   = 80.0/180.0*M_PI;
+
 };
 
 }  // namespace gazebo
