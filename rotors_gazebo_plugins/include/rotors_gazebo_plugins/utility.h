@@ -427,10 +427,11 @@ struct myTf
         M.block(0, 3, 3, 1) = pos;
         return M;
     }
-
-    PointXYZI Point3D() const
+    
+    template <typename PointType = PointXYZI>
+    PointType Point3D() const
     {
-        PointXYZI p;
+        PointType p;
 
         p.x = (float)pos.x();
         p.y = (float)pos.y();
