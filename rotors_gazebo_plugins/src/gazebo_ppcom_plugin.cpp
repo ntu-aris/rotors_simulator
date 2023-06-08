@@ -951,21 +951,17 @@ namespace gazebo
     {
         PPComNode &node_i = ppcom_nodes_[node_idx];
 
-        node_i.gimbal_cmd(0) = -69;
-        node_i.gimbal_cmd(4) = 0.5*sin(2*M_PI/7.0*ros::Time::now().toSec());
-        node_i.gimbal_cmd(5) = 0.7*sin(2*M_PI/3.0*ros::Time::now().toSec());
-
         if (node_i.name == "gcs")
             return;
 
-        // if (node_i.gimbal_cmd(0) < -1e-7 &&
-        //     (ros::Time::now() - node_i.gimbal_cmd_last_update).toSec() > 2.0 / gimbal_update_hz_)
-        // {
-        //     // change from rate control to angle control
-        //     node_i.gimbal_cmd(0) = 0.1;
-        //     node_i.gimbal_cmd(1) = node_i.cam_rpy(1);
-        //     node_i.gimbal_cmd(2) = node_i.cam_rpy(2);
-        // }
+        if (node_i.gimbal_cmd(0) < -1e-7 &&
+            (ros::Time::now() - node_i.gimbal_cmd_last_update).toSec() > 2.0 / gimbal_update_hz_)
+        {
+            // change from rate control to angle control
+            node_i.gimbal_cmd(0) = 0.1;
+            node_i.gimbal_cmd(1) = node_i.cam_rpy(1);
+            node_i.gimbal_cmd(2) = node_i.cam_rpy(2);
+        }
 
         if (node_i.gimbal_cmd(0) > 0.0) // angle control mode
         {
