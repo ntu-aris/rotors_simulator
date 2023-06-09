@@ -270,7 +270,7 @@ namespace gazebo
                                                                             boost::bind(&GazeboPPComPlugin::triggerCallback, this, _1, node_idx));
             // Publisher for the topology
             if (node.role == "manager")
-                node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
+                node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/ppcom_topology", 1);
 
             // Publisher for camera pyramid visuals
             node.camera_pyramid_pub = ros_node_handle_->advertise<visualization_msgs::Marker>(
