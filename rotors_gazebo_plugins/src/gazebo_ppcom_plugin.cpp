@@ -46,6 +46,9 @@
 // // USER HEADERS
 // #include "ConnectGazeboToRosTopic.pb.h"
 
+#define RAD2DEG(x) (x * 180.0 / M_PI)
+#define DEG2RAD(x) (x * M_PI / 180.0)
+
 using namespace std;
 
 namespace gazebo
@@ -267,7 +270,7 @@ namespace gazebo
                                                                             boost::bind(&GazeboPPComPlugin::triggerCallback, this, _1, node_idx));
             // Publisher for the topology
             if (node.role == "manager")
-                node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/" + node.name + "/ppcom_topology", 1);
+                node.topo_pub = ros_node_handle_->advertise<rotors_comm::PPComTopology>("/ppcom_topology", 1);
 
             // Publisher for camera pyramid visuals
             node.camera_pyramid_pub = ros_node_handle_->advertise<visualization_msgs::Marker>(
@@ -614,9 +617,7 @@ namespace gazebo
                     Util::publishCloud(cloud_inpo_pub_, *cloud_inpo_, ros::Time::now(), "world");
                 }
             }
-
         }
-
     }
     
     void GazeboPPComPlugin::EvaluateCam(PPComNode& node_i, ros::Time time_of_evaluate)
@@ -628,114 +629,149 @@ namespace gazebo
         Vector3d _cam_rpy_rate;
         findClosestOdom(time_of_evaluate, node_i, _odom_msg);
         findClosestGimState(time_of_evaluate, node_i, _cam_rpy, _cam_rpy_rate);
-        myTf<double> tf_uav(_odom_msg);
+        
+        // See the technical note https://ntu-aris.github.io/caric/docs/CARIC_motion_blur.pdf
+        // for the following mathematics
 
-        Vector3d p_cam_world = tf_uav * node_i.Cam_rel_Uav;
-        PointXYZIN pos_cam;
-        pos_cam.x = p_cam_world(0);
-        pos_cam.y = p_cam_world(1);
-        pos_cam.z = p_cam_world(2);
-        // node_i.cam_ypr = Vector3d(0.0, node_i., tf_uav.yaw());
-        Vector3d ypr(tf_uav.yaw() + _cam_rpy(2) / M_PI * 180.0, _cam_rpy(1) / M_PI * 180.0, 0.0);
-        myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);
+        /* #region Calculate the first order states ---------------------------------------------*/
+
+        // Body frame pose
+        myTf tf_W_B(_odom_msg);
+        double psi   = DEG2RAD(tf_W_B.yaw());
+        double theta = DEG2RAD(tf_W_B.pitch());
+        double phi   = DEG2RAD(tf_W_B.roll());
+        
+        // Stabilizer pose wrt the body frame
+        Vector3d tran_B_S(node_i.Cam_rel_Uav);
+        Quaternd quat_B_S(Util::YPR2Rot(0, 0, -RAD2DEG(phi))*Util::YPR2Rot(0, -RAD2DEG(theta), 0));
+        myTf tf_B_S(quat_B_S, tran_B_S);
+        
+        // Stabilizer pose wrt to the world frame
+        myTf tf_W_S = tf_W_B * tf_B_S;
+
+        // Camera angles
+        double alpha = (_cam_rpy(2));
+        double beta  = (_cam_rpy(1));
+        double da = _cam_rpy_rate(2);
+        double db = _cam_rpy_rate(1);
+        
+        // Camera pose
+        Vector3d tran_S_C(0, 0, 0);
+        Quaternd quat_S_C(Util::YPR2Rot(RAD2DEG(alpha), RAD2DEG(beta), 0));
+        myTf tf_S_C(quat_S_C, tran_S_C);
+        myTf tf_W_C = tf_W_S * tf_S_C;
+        
+        /* #endregion Calculate the first order states ------------------------------------------*/
 
         std::vector<int> k_idx; std::vector<float> k_distances;
-        kdTreeInterestPts_.radiusSearch(pos_cam, node_i.visible_radius, k_idx, k_distances);
-
-        // odometry message gives velocity in body frame
-        Vector3d v_uav_world = tf_uav.rot * Vector3d(_odom_msg.twist.twist.linear.x,
-                                                     _odom_msg.twist.twist.linear.y,
-                                                     _odom_msg.twist.twist.linear.z);
-
-        // angvel uav is expressed in body frame
-        Vector3d angv_uav(_odom_msg.twist.twist.angular.x,
-                          _odom_msg.twist.twist.angular.y,
-                          _odom_msg.twist.twist.angular.z);
-
-        Vector3d v_cam_world = v_uav_world + tf_uav.rot * Util::skewSymmetric(angv_uav) * node_i.Cam_rel_Uav;
+        kdTreeInterestPts_.radiusSearch(tf_W_C.Point3D<PointXYZIN>(), node_i.visible_radius, k_idx, k_distances);
 
         for (int j = 0; j < k_idx.size(); j++) //
         {
             PointXYZIN &kpoint = cloud_inpo_->points[k_idx[j]];
             assert(kpoint.curvature == k_idx[j]);
-            Vector3d InPoint_world(kpoint.x, kpoint.y, kpoint.z);
-            Vector3d InPoint_cam = tf_cam.inverse() * InPoint_world;
 
-            if (InPoint_cam(0) <= 0.0)
+            // Interest point coordinates in world and in camera frames
+            Vector3d p_W_intpoint(kpoint.x, kpoint.y, kpoint.z);
+            Vector3d p_C_intpoint = tf_W_C.inverse() * p_W_intpoint;
+
+            /* #region Check if interest points fall in the FOV ---------------------------------*/
+            
+            if (p_C_intpoint(0) <= 0.0)
                 continue;
 
-            double horz_angle = atan(InPoint_cam(1) / InPoint_cam(0)) / M_PI * 180.0;
-            double vert_angle = atan(InPoint_cam(2) / InPoint_cam(0)) / M_PI * 180.0;
+            double horz_angle = atan(p_C_intpoint(1) / p_C_intpoint(0)) / M_PI * 180.0;
+            double vert_angle = atan(p_C_intpoint(2) / p_C_intpoint(0)) / M_PI * 180.0;
 
             if (horz_angle > node_i.fov_h / 2 || horz_angle < -node_i.fov_h / 2 ||
                 vert_angle > node_i.fov_v / 2 || vert_angle < -node_i.fov_v / 2)
                 continue;
 
+            /* #endregion Check if interest points fall in the FOV ------------------------------*/
+
             double visualized = false;
-            if (CheckInterestPointLOS(p_cam_world, InPoint_world, node_i.ray_inpo))
+            if (CheckInterestPointLOS(tf_W_C.pos, p_W_intpoint, node_i.ray_inpo))
             {
                 // Temporary point to be evaluated for actual detection
                 PointXYZIN detected_point = kpoint; detected_point.intensity = 0;
+                
+                /* #region Evaluate the motion blur ---------------------------------------------*/
 
-                MatrixXd R_dot_cam(3,3);
-                R_dot_cam << -_cam_rpy_rate(2)*sin(_cam_rpy(2))*cos(_cam_rpy(1))-
-                              _cam_rpy_rate(1)*cos(_cam_rpy(2))*sin(_cam_rpy(1)),
-                             -_cam_rpy_rate(2)*cos(_cam_rpy(2)), 
-                             -_cam_rpy_rate(2)*sin(_cam_rpy(2))*sin(_cam_rpy(1))+
-                              _cam_rpy_rate(1)*cos(_cam_rpy(2))*cos(_cam_rpy(1)),
-                              _cam_rpy_rate(2)*cos(_cam_rpy(2))*cos(_cam_rpy(1))-
-                              _cam_rpy_rate(1)*sin(_cam_rpy(2))*sin(_cam_rpy(1)), 
-                             -_cam_rpy_rate(2)*sin(_cam_rpy(2)),
-                              _cam_rpy_rate(2)*cos(_cam_rpy(2))*sin(_cam_rpy(1))+
-                              _cam_rpy_rate(1)*sin(_cam_rpy(2))*cos(_cam_rpy(1)),
-                             -_cam_rpy_rate(1)*cos(_cam_rpy(1)), 0.0, 
-                             -_cam_rpy_rate(1)*sin(_cam_rpy(1));
+                // Linear velocity of the world frame
+                Vector3d vel_W_B = tf_W_B.rot*Vector3d(_odom_msg.twist.twist.linear.x,
+                                                       _odom_msg.twist.twist.linear.y,
+                                                       _odom_msg.twist.twist.linear.z);
 
-                double phi = tf_uav.roll()/180.0*M_PI;
-                double theta = tf_uav.pitch()/180.0*M_PI;
-                MatrixXd B_matrix(3,3);
-                B_matrix << -sin(theta),           0.0,       1.0,
-                             sin(phi)*cos(theta),  cos(phi),  0.0,
-                             cos(phi)*cos(theta), -sin(phi),  0.0;
-                Vector3d euler_rate = B_matrix.inverse()*angv_uav; //angvel is alr in body frame uav
-                Vector3d angvel_virtual_frame(0.0, 0.0, euler_rate(0)); 
+                // Angular velocity of body frame
+                Vector3d omega_B_B(_odom_msg.twist.twist.angular.x,
+                                   _odom_msg.twist.twist.angular.y,
+                                   _odom_msg.twist.twist.angular.z);
 
-                MatrixXd angvel_cam_skew = Util::skewSymmetric(angvel_virtual_frame) + 
-                                            Util::YPR2Rot(tf_uav.yaw(), 0.0, 0.0) * R_dot_cam * tf_cam.rot.inverse();
-                if (fabs(angvel_cam_skew(0,1)+angvel_cam_skew(1,0))>0.05)
-                    ROS_INFO("NOT RIGHT! angvel_cam_skew not skew-symmetric!!");
+                // Angular velocity of the stabilizer frame wrt the world frame, using equation (8) in the technical note
+                Vector3d omega_W_S(0, 0, sin(phi)/cos(theta)*omega_B_B(1) + cos(phi)/cos(theta)*omega_B_B(2));
 
-                Vector3d v_point_in_cam = -tf_cam.rot.inverse().normalized().toRotationMatrix() * 
-                                            (angvel_cam_skew * (InPoint_world  - p_cam_world) +  v_cam_world);
-                Vector3d InPoint_cam_moved = InPoint_cam + v_point_in_cam * node_i.exposure;
+                // Shorthands
+                double sa = sin(alpha);
+                double ca = cos(alpha);
+                double sb = sin(beta);
+                double cb = cos(beta);
+
+                // Camera linear velocity wrt world frame (note that tran_S_C = tran_B_S)
+                Vector3d vel_W_C = vel_W_B + tf_W_B.rot*Util::skewSymmetric(omega_B_B)*tran_B_S;
+
+                // Camera angular velocity wrt the world frame
+                Matrix3d rotm_S_C_dot;
+                rotm_S_C_dot << -da*sa*cb - db*ca*sb, -da*ca, -da*sa*sb + db*ca*cb,
+                                 da*ca*cb - db*sa*sb, -da*sa,  da*ca*sb + db*sa*cb,
+                                -db*cb,                0,     -db*sb;
+                
+                // Angular velocity of the camera frame
+                Matrix3d omega_W_C_cross = Util::skewSymmetric(omega_W_S) + tf_W_S.rot*rotm_S_C_dot*tf_W_C.rot.inverse();
+                Vector3d omega_W_C(omega_W_C_cross(2, 1), omega_W_C_cross(0, 2), omega_W_C_cross(1, 0));
+
+                // Finding the linear velocity of the interestpoint in the camera frame
+                Vector3d vel_C_intpoint = tf_W_C.rot.inverse()*Util::skewSymmetric(omega_W_C)*(-p_W_intpoint + tf_W_C.pos)
+                                        - tf_W_C.rot.inverse()*vel_W_C;
+
+                Vector3d p_C_intpoint_moved = p_C_intpoint + vel_C_intpoint * node_i.exposure;
+
                 // horizontal camera pixels
-                double pixel_move_v = node_i.focal_length * fabs(InPoint_cam(1) / InPoint_cam(0) -
-                                        InPoint_cam_moved(1) / InPoint_cam_moved(0)) / node_i.pixel_size;
+                double pixel_move_v = node_i.focal_length * fabs(p_C_intpoint(1) / p_C_intpoint(0) -
+                                        p_C_intpoint_moved(1) / p_C_intpoint_moved(0)) / node_i.pixel_size;
+
                 // vertical camera pixels
-                double pixel_move_u = node_i.focal_length * fabs(InPoint_cam(2) / InPoint_cam(0) -
-                                        InPoint_cam_moved(2) / InPoint_cam_moved(0)) / node_i.pixel_size;
+                double pixel_move_u = node_i.focal_length * fabs(p_C_intpoint(2) / p_C_intpoint(0) -
+                                        p_C_intpoint_moved(2) / p_C_intpoint_moved(0)) / node_i.pixel_size;
 
                 double score1 = min(1.0 / max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
 
+                /* #endregion Evaluate the motion blur ------------------------------------------*/
+
+                /* #region Evaluate the pixel size ----------------------------------------------*/
+
                 // compute resolution requirement mm per pixel
                 Vector3d Normal_world(kpoint.normal_x, kpoint.normal_y, kpoint.normal_z);
-                Vector3d Normal_cam = (tf_cam.rot.inverse() * Normal_world).normalized();
+                Vector3d Normal_cam = (tf_W_C.rot.inverse() * Normal_world).normalized();
                 // Normal_cam = Vector3d(-1.0, 0.0, 0.0); //for testing only
                 Vector3d x_disp(-Normal_cam(2), 0.0, Normal_cam(0)); // the gradient projected on the x-z plane
-                Vector3d inPoint_xplus = InPoint_cam + 0.0005 * x_disp;
-                Vector3d inPoint_xminus = InPoint_cam - 0.0005 * x_disp;
+                Vector3d inPoint_xplus = p_C_intpoint + 0.0005 * x_disp;
+                Vector3d inPoint_xminus = p_C_intpoint - 0.0005 * x_disp;
                 double v_plus = inPoint_xplus(2) * node_i.focal_length / inPoint_xplus(0);
                 double v_minus = inPoint_xminus(2) * node_i.focal_length / inPoint_xminus(0);
                 double mm_per_pixel_v = node_i.pixel_size / fabs(v_plus - v_minus);
 
                 Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); // the gradient projected on the x-y plane
-                Vector3d inPoint_yplus = InPoint_cam + 0.0005 * y_disp;
-                Vector3d inPoint_yminus = InPoint_cam - 0.0005 * y_disp;
+                Vector3d inPoint_yplus = p_C_intpoint + 0.0005 * y_disp;
+                Vector3d inPoint_yminus = p_C_intpoint - 0.0005 * y_disp;
                 double u_plus = inPoint_yplus(1) * node_i.focal_length / inPoint_yplus(0);
                 double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
                 double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
 
                 double score2 = min(node_i.desired_mm_per_pixel / max(mm_per_pixel_v, mm_per_pixel_u), 1.0);
+
+                /* #endregion Evaluate the pixel size -------------------------------------------*/
+
+                // Combine the scores
                 double score = score1 * score2;
                 if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
                     inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
@@ -755,46 +791,10 @@ namespace gazebo
                     nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog.size(), detected_point);
                 else if (nodeIPLog[point_idx].scored_point.intensity < detected_point.intensity)
                     nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog[point_idx].detected_order, detected_point); 
-
-                // CloudDtectedInPo->clear();
-                // for(map< int, pair<int, PointXYZIN> >::iterator itr = nodeIPLog.begin(); itr != nodeIPLog.end(); itr++)
-                //     CloudDtectedInPo->push_back(itr->second.second);
-                
-                // // if (visualized) continue;
-                // visualized = true;
-                // visualization_msgs::Marker m;
-                // m.type   = visualization_msgs::Marker::ARROW;
-                // m.action = visualization_msgs::Marker::ADD;
-                // m.id     = 1; // % 3000;  // Start the id again after ___ points published (if not RVIZ goes very slow)
-                // m.ns     = "view_agent_1";
-
-                // m.color.a = 1.0; // Don't forget to set the alpha!
-                // m.color.r = 0.0;
-                // m.color.g = 1.0;
-                // m.color.b = 0.0;
-
-                // m.scale.x = 0.15;
-                // m.scale.y = 0.25;
-                // m.scale.z = 0.4;
-                // m.header.stamp = ros::Time::now();
-                // m.header.frame_id = "world";
-                // geometry_msgs::Point point1;
-                // point1.x = InPoint_world(0);
-                // point1.y = InPoint_world(1);
-                // point1.z = InPoint_world(2);
-                // m.points.push_back(point1);
-                // Vector3d v_point_world = tf_cam.rot* v_point_in_cam*1.0;
-                // point1.x = InPoint_world(0) + v_point_world(0);
-                // point1.y = InPoint_world(1) + v_point_world(1);
-                // point1.z = InPoint_world(2) + v_point_world(2);
-                // m.points.push_back(point1);
-                // node_i.camera_pyramid_pub.publish(m);
-
-                // ROS_INFO("Setting points to high intensity!!");
             }
         }
-
     }
+
     void GazeboPPComPlugin::TallyScore()
     {
         // Go through the log of each node in line of sight of GCS to tally the score
@@ -950,8 +950,10 @@ namespace gazebo
     void GazeboPPComPlugin::TimerCallback(const ros::TimerEvent &, int node_idx)
     {
         PPComNode &node_i = ppcom_nodes_[node_idx];
+
         if (node_i.name == "gcs")
             return;
+
         if (node_i.gimbal_cmd(0) < -1e-7 &&
             (ros::Time::now() - node_i.gimbal_cmd_last_update).toSec() > 2.0 / gimbal_update_hz_)
         {
@@ -960,6 +962,7 @@ namespace gazebo
             node_i.gimbal_cmd(1) = node_i.cam_rpy(1);
             node_i.gimbal_cmd(2) = node_i.cam_rpy(2);
         }
+
         if (node_i.gimbal_cmd(0) > 0.0) // angle control mode
         {
             double pitch_cmd = min(node_i.gimbal_pitch_max, max(-node_i.gimbal_pitch_max, Util::wrapToPi(node_i.gimbal_cmd(1))));
@@ -974,6 +977,7 @@ namespace gazebo
             node_i.cam_rpy(1) = node_i.cam_rpy(1) + node_i.cam_rpy_rate(1) * 1.0 / gimbal_update_hz_;
             node_i.cam_rpy(2) = node_i.cam_rpy(2) + node_i.cam_rpy_rate(2) * 1.0 / gimbal_update_hz_;
         }
+
         if (node_i.gimbal_cmd(0) < -1e-7) // rate control mode
         {
             node_i.cam_rpy_rate(1) = max(-node_i.gimbal_rate_max, min(node_i.gimbal_rate_max, node_i.gimbal_cmd(4)));
