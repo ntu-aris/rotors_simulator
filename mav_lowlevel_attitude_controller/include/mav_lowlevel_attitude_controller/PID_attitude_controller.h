@@ -27,7 +27,8 @@ class PIDAttitudeController
   void InitializeParams();
 
   void SetPIDParameters(double roll_gain, double pitch_gain, double p_gain, double q_gain,
-                        double r_gain, double roll_integrator_gain, double pitch_integrator_gain)
+                        double r_gain, double roll_integrator_gain, double pitch_integrator_gain,
+                        double max_integrator_error)
   {
     roll_gain_ = roll_gain;
     pitch_gain_ = pitch_gain;
@@ -36,6 +37,7 @@ class PIDAttitudeController
     r_gain_ = r_gain;
     roll_integrator_gain_ = roll_integrator_gain;
     pitch_integrator_gain_ = pitch_integrator_gain;
+    max_integrator_error_ = max_integrator_error;
   }
 
   void SetDesiredAttitude(double desired_roll, double desired_pitch, double desired_yaw_rate,

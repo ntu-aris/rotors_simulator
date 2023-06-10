@@ -91,7 +91,7 @@ void PIDAttitudeControllerNode::DynConfigCallback(mav_linear_mpc::PIDAttitudeCon
 
   PID_attitude_controller_.SetPIDParameters(config.roll_gain, config.pitch_gain, config.p_gain,
                                             config.q_gain, config.r_gain, config.roll_int_gain,
-                                            config.pitch_int_gain);
+                                            config.pitch_int_gain, config.max_integrator_error);
 }
 
 }
