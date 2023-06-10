@@ -631,7 +631,7 @@ namespace gazebo
         findClosestGimState(time_of_evaluate, node_i, _cam_rpy, _cam_rpy_rate);
         
         // See the technical note https://ntu-aris.github.io/caric/docs/CARIC_motion_blur.pdf
-        // for the following mathematics
+        // for the mathematical derivation of the following calculations
 
         /* #region Calculate the first order states ---------------------------------------------*/
 
@@ -697,7 +697,7 @@ namespace gazebo
                 
                 /* #region Evaluate the motion blur ---------------------------------------------*/
 
-                // Linear velocity of the world frame
+                // Linear velocity of the body frame
                 Vector3d vel_W_B = tf_W_B.rot*Vector3d(_odom_msg.twist.twist.linear.x,
                                                        _odom_msg.twist.twist.linear.y,
                                                        _odom_msg.twist.twist.linear.z);
@@ -727,6 +727,11 @@ namespace gazebo
                 
                 // Angular velocity of the camera frame
                 Matrix3d omega_W_C_cross = Util::skewSymmetric(omega_W_S) + tf_W_S.rot*rotm_S_C_dot*tf_W_C.rot.inverse();
+
+                // Confirm that the matrix is skew symmetric
+                assert(fabs(omega_W_C_cross.trace()) < 1e-12 && fabs((omega_W_C_cross + omega_W_C_cross.transpose()).sum()) < 1e-9);
+
+                // Retrieve the angular velocity vector
                 Vector3d omega_W_C(omega_W_C_cross(2, 1), omega_W_C_cross(0, 2), omega_W_C_cross(1, 0));
 
                 // Finding the linear velocity of the interestpoint in the camera frame
@@ -743,43 +748,55 @@ namespace gazebo
                 double pixel_move_u = node_i.focal_length * fabs(p_C_intpoint(2) / p_C_intpoint(0) -
                                         p_C_intpoint_moved(2) / p_C_intpoint_moved(0)) / node_i.pixel_size;
 
-                double score1 = min(1.0 / max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
+                double q_blur = min(1.0 / max(fabs(pixel_move_v), fabs(pixel_move_u)), 1.0);
 
                 /* #endregion Evaluate the motion blur ------------------------------------------*/
+
 
                 /* #region Evaluate the pixel size ----------------------------------------------*/
 
                 // compute resolution requirement mm per pixel
                 Vector3d Normal_world(kpoint.normal_x, kpoint.normal_y, kpoint.normal_z);
                 Vector3d Normal_cam = (tf_W_C.rot.inverse() * Normal_world).normalized();
-                // Normal_cam = Vector3d(-1.0, 0.0, 0.0); //for testing only
+
                 Vector3d x_disp(-Normal_cam(2), 0.0, Normal_cam(0)); // the gradient projected on the x-z plane
                 Vector3d inPoint_xplus = p_C_intpoint + 0.0005 * x_disp;
                 Vector3d inPoint_xminus = p_C_intpoint - 0.0005 * x_disp;
+                
+                Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); // the gradient projected on the x-y plane
+                Vector3d inPoint_yplus = p_C_intpoint + 0.0005 * y_disp;
+                Vector3d inPoint_yminus = p_C_intpoint - 0.0005 * y_disp;
+
+                if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
+                    inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
+                {
+                    printf(KRED "NOT RIGHT! X smaller than zero!!" RESET);
+                    continue;
+                }
+
                 double v_plus = inPoint_xplus(2) * node_i.focal_length / inPoint_xplus(0);
                 double v_minus = inPoint_xminus(2) * node_i.focal_length / inPoint_xminus(0);
                 double mm_per_pixel_v = node_i.pixel_size / fabs(v_plus - v_minus);
 
-                Vector3d y_disp(-Normal_cam(1), Normal_cam(0), 0.0); // the gradient projected on the x-y plane
-                Vector3d inPoint_yplus = p_C_intpoint + 0.0005 * y_disp;
-                Vector3d inPoint_yminus = p_C_intpoint - 0.0005 * y_disp;
                 double u_plus = inPoint_yplus(1) * node_i.focal_length / inPoint_yplus(0);
                 double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
+
                 double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
 
-                double score2 = min(node_i.desired_mm_per_pixel / max(mm_per_pixel_v, mm_per_pixel_u), 1.0);
+                double q_res = min(node_i.desired_mm_per_pixel / max(mm_per_pixel_v, mm_per_pixel_u), 1.0);
 
                 /* #endregion Evaluate the pixel size -------------------------------------------*/
 
-                // Combine the scores
-                double score = score1 * score2;
-                if (inPoint_yplus(0) < 0 || inPoint_yminus(0) < 0 ||
-                    inPoint_xplus(0) < 0 || inPoint_xminus(0) < 0)
-                {
-                    ROS_INFO("NOT RIGHT! X smaller than zero!!");
-                    continue;
-                }
+                
+                /* #region Combine the scores ---------------------------------------------------*/
 
+                double score = q_blur * q_res;
+
+                /* #endregion Combine the scores ------------------------------------------------*/
+
+
+                /* #region Store the detected point ---------------------------------------------*/
+                
                 // std::cout<<"mm_per pixel u is "<<mm_per_pixel_u<<"mm_per pixel v is "<<mm_per_pixel_v<<std::endl;
                 if (score > cloud_inpo_->points[k_idx[j]].intensity)
                     cloud_inpo_->points[k_idx[j]].intensity = score;
@@ -790,7 +807,10 @@ namespace gazebo
                 if (nodeIPLog.find(point_idx) == nodeIPLog.end())
                     nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog.size(), detected_point);
                 else if (nodeIPLog[point_idx].scored_point.intensity < detected_point.intensity)
-                    nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog[point_idx].detected_order, detected_point); 
+                    nodeIPLog[point_idx] = IndexedInterestPoint(nodeIPLog[point_idx].detected_order, detected_point);
+
+                /* #endregion Store the detected point ------------------------------------------*/
+            
             }
         }
     }
