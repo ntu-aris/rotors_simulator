@@ -780,7 +780,6 @@ namespace gazebo
 
                 double u_plus = inPoint_yplus(1) * node_i.focal_length / inPoint_yplus(0);
                 double u_minus = inPoint_yminus(1) * node_i.focal_length / inPoint_yminus(0);
-
                 double mm_per_pixel_u = node_i.pixel_size / fabs(u_plus - u_minus);
 
                 double q_res = min(node_i.desired_mm_per_pixel / max(mm_per_pixel_v, mm_per_pixel_u), 1.0);
@@ -791,6 +790,9 @@ namespace gazebo
                 /* #region Combine the scores ---------------------------------------------------*/
 
                 double score = q_blur * q_res;
+
+                if (score < 0.2)
+                    continue;
 
                 /* #endregion Combine the scores ------------------------------------------------*/
 
