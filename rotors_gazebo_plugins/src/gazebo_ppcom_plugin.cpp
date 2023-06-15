@@ -929,10 +929,10 @@ namespace gazebo
                     score_atpoint.pose.orientation.w = 1.0;
                     score_atpoint.scale.x = 1.0;
                     score_atpoint.scale.y = 1.0;
-                    score_atpoint.scale.z = 0.5;
-                    score_atpoint.color.r = 0.0;
+                    score_atpoint.scale.z = 1.0;
+                    score_atpoint.color.r = 1.0;
                     score_atpoint.color.g = 1.0;
-                    score_atpoint.color.b = 0.0;
+                    score_atpoint.color.b = 1.0;
                     score_atpoint.color.a = 1.0;
                     std::ostringstream streamObj3;
                     streamObj3 << std::fixed;
