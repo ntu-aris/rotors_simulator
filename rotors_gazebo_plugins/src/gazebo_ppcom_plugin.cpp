@@ -554,6 +554,7 @@ namespace gazebo
                 Vector3d ypr(tf_uav.yaw() + node_i.cam_rpy(2) / M_PI * 180.0, node_i.cam_rpy(1) / M_PI * 180.0, 0.0);
                 myTf<double> tf_cam(Util::YPR2Rot(ypr), p_cam_world);                
                 std::vector<Vector3d> point_list_in_world;
+                std::vector<Vector3d> point_list_in_world_close;
                 point_list_in_world.push_back(p_cam_world);
                 double dist = node_i.focal_length/node_i.pixel_size * 0.001 * node_i.desired_mm_per_pixel+5.0;
                 for (double k : {1.0, -1.0})
@@ -565,6 +566,7 @@ namespace gazebo
                                               l * tan(node_i.fov_v * 0.00872664625) * dist);
                         Vector3d point_in_world = tf_cam * point_in_cam;
                         point_list_in_world.push_back(point_in_world);
+                        point_list_in_world_close.push_back(tf_cam * (point_in_cam * 0.4));
                     }
                     point_list_in_world.push_back(p_cam_world);
                 }
@@ -572,6 +574,12 @@ namespace gazebo
                 point_list_in_world.push_back(point_list_in_world[4]);
                 point_list_in_world.push_back(point_list_in_world[5]);
                 point_list_in_world.push_back(point_list_in_world[2]);
+
+                point_list_in_world.push_back(point_list_in_world_close[1]);
+                point_list_in_world.push_back(point_list_in_world_close[3]);
+                point_list_in_world.push_back(point_list_in_world_close[2]);
+                point_list_in_world.push_back(point_list_in_world_close[0]);
+                point_list_in_world.push_back(point_list_in_world_close[1]);
 
                 // visualization_msgs::Marker m;
                 // m.type   = visualization_msgs::Marker::LINE_STRIP;
