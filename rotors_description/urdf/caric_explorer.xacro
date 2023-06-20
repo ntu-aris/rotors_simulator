@@ -58,7 +58,7 @@
   <xacro:include filename="$(find velodyne_description)/urdf/VLP-16.urdf.xacro"/>
   <xacro:VLP-16 parent="${namespace}/servo"
                 name="velodyne" topic="/${namespace}/velodyne_points"
-                max_range="35.0" noise="0.0" hz="10" samples="440" gpu="true">
+                max_range="50.0" noise="0.0" hz="10" samples="440" gpu="true">
     <origin xyz="0.0 0.0 -0.03585" rpy="0 0 0" />
     <!-- <origin xyz="0.0 0.0 0.2" rpy="1.57079632679 0 0" /> -->
   </xacro:VLP-16>
