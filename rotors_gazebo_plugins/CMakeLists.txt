@@ -456,6 +456,7 @@ endif()
 
 #==================================== SERVO MODEL PLUGIN ========================================//
 if (NOT NO_ROS)
+  add_definitions(-std=c++17)
   add_library(rotors_gazebo_servo_model SHARED src/gazebo_servo_model.cpp)
   target_link_libraries(rotors_gazebo_servo_model ${target_linking_LIBRARIES} )
   add_dependencies(rotors_gazebo_servo_model ${catkin_EXPORTED_TARGETS})
@@ -564,6 +565,7 @@ endif()
 # Linux is not consistent with plugin availability, even on Gazebo 7
 #if("${GAZEBO_VERSION}" VERSION_LESS "7.0")
 if(${gazebo_VERSION_MAJOR} GREATER 4)
+  add_definitions(-std=c++17)
   add_library(LiftDragPlugin SHARED src/liftdrag_plugin/liftdrag_plugin.cpp)
   target_link_libraries(LiftDragPlugin ${target_linking_LIBRARIES} )
   if (NOT NO_ROS)

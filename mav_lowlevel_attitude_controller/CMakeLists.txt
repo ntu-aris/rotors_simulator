@@ -4,7 +4,7 @@ project(mav_lowlevel_attitude_controller)
 find_package(catkin_simple REQUIRED)
 catkin_simple(ALL_DEPS_REQUIRED)
 
-add_definitions(-std=c++11)
+add_definitions(-std=c++17)
 set(CMAKE_BUILD_TYPE Release)
 
 #############

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(rotors_hil_interface)
 
-add_definitions(-std=c++11)
+add_definitions(-std=c++17)
 
 find_package(Mavlink QUIET)
 
